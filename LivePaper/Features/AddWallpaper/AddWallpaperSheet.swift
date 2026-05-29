@@ -34,7 +34,6 @@ enum AddWallpaperMode: String, CaseIterable, Identifiable {
     var primaryActionTitle: String {
         "Create Wallpaper"
     }
-
 }
 
 struct AddWallpaperSheet: View {
@@ -190,8 +189,8 @@ struct AddWallpaperSheet: View {
 
     private var localVideoDropTitle: String {
         selectedLocalVideoURL?.lastPathComponent ?? "Drop a video here, or click to choose one"
-
     }
+
     private var localVideoDropSubtitle: String {
         selectedLocalVideoURL == nil
             ? "Supported formats: .mp4, .mov, .m4v, .mkv"

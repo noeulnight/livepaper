@@ -27,27 +27,3 @@ final class WallpaperCoordinatorPolicyTests: XCTestCase {
         XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID, displayID])
     }
 }
-
-@MainActor
-private final class RecordingWallpaperRuntime: WallpaperRuntime {
-    private(set) var updateCalls: [WallpaperConfig] = []
-    private(set) var pauseCalls: [DisplayID] = []
-
-    func start(config: WallpaperConfig) async throws {
-        updateCalls.append(config)
-    }
-
-    func stop(displayID: DisplayID) async {}
-
-    func stopAll() async {}
-
-    func update(config: WallpaperConfig) async throws {
-        updateCalls.append(config)
-    }
-
-    func pause(displayID: DisplayID) async {
-        pauseCalls.append(displayID)
-    }
-
-    func resume(displayID: DisplayID) async {}
-}

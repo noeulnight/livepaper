@@ -265,16 +265,23 @@ private struct MenuBarControls: View {
 
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .livePaperSelectSettingsTab, object: nil)
-
-            NSApplication.shared.windows
-                .first { $0.title == "LivePaper" }?
-                .makeKeyAndOrderFront(nil)
+            bringMainWindowForward(orderRegardless: false)
 
             DispatchQueue.main.async {
-                NSApplication.shared.windows
-                    .first { $0.title == "LivePaper" }?
-                    .orderFrontRegardless()
+                bringMainWindowForward(orderRegardless: true)
             }
+        }
+    }
+
+    private func bringMainWindowForward(orderRegardless: Bool) {
+        guard let window = NSApplication.shared.windows.first(where: { $0.title == "LivePaper" }) else {
+            return
+        }
+
+        if orderRegardless {
+            window.orderFrontRegardless()
+        } else {
+            window.makeKeyAndOrderFront(nil)
         }
     }
 
@@ -448,7 +455,7 @@ private struct MenuBarMaterialButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(isProminent ? .white : .white)
+            .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 40)
             .background(buttonBackground(isPressed: configuration.isPressed))

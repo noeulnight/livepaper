@@ -11,16 +11,8 @@ final class WallpaperRuntimeController {
         self.runtime = runtime
     }
 
-    func setActiveConfigs(_ configs: [DisplayID: WallpaperConfig]) {
-        activeConfigs = configs
-    }
-
     func removePausedDisplay(_ displayID: DisplayID) {
         pausedDisplayIDs.remove(displayID)
-    }
-
-    func setPausedDisplay(_ displayID: DisplayID) {
-        pausedDisplayIDs.insert(displayID)
     }
 
     func intersectPausedDisplays(with displayIDs: Set<DisplayID>) {

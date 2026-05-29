@@ -120,7 +120,7 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
 }
 
 @MainActor
-private final class RecordingWallpaperRuntime: WallpaperRuntime {
+final class RecordingWallpaperRuntime: WallpaperRuntime {
     private(set) var updateCalls: [WallpaperConfig] = []
     private(set) var pauseCalls: [DisplayID] = []
 
