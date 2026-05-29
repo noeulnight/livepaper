@@ -16,6 +16,7 @@ final class WallpaperSettingsStore {
         static let steamCMDBookmark = "steam.steamCMDBookmark"
         static let steamCMDLoginMode = "steam.loginMode"
         static let steamUsername = "steam.username"
+        static let hasCompletedIntro = "app.hasCompletedIntro"
     }
 
     private let defaults: UserDefaults
@@ -48,6 +49,23 @@ final class WallpaperSettingsStore {
         defaults.set(preferences.pauseOnBattery, forKey: Keys.pauseOnBattery)
         defaults.set(preferences.pauseOnFullscreen, forKey: Keys.pauseOnFullscreen)
         defaults.set(preferences.muteOnFullscreen, forKey: Keys.muteOnFullscreen)
+    }
+
+    func shouldShowFirstLaunchIntro(hasExistingWallpapers: Bool) -> Bool {
+        if defaults.bool(forKey: Keys.hasCompletedIntro) {
+            return false
+        }
+
+        if hasExistingWallpapers {
+            markFirstLaunchIntroCompleted()
+            return false
+        }
+
+        return true
+    }
+
+    func markFirstLaunchIntroCompleted() {
+        defaults.set(true, forKey: Keys.hasCompletedIntro)
     }
 
     func loadSavedConfigs() -> [DisplayID: SavedWallpaperConfig] {

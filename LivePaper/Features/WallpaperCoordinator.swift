@@ -26,6 +26,7 @@ final class WallpaperCoordinator {
     private(set) var hasSavedWallpapers = false
     private(set) var galleryItems: [WallpaperGalleryItem] = []
     private(set) var loginItemStatus: LoginItemStatus
+    private(set) var shouldShowFirstLaunchIntro = false
 
     var selectedDisplayIDs: Set<DisplayID> = [] {
         didSet {
@@ -91,6 +92,9 @@ final class WallpaperCoordinator {
 
         libraryModel.syncSteamMetadataFromLocalFiles(savedConfigs: &savedConfigs)
         syncLibraryState()
+        shouldShowFirstLaunchIntro = resolvedStore.shouldShowFirstLaunchIntro(
+            hasExistingWallpapers: !galleryItems.isEmpty || !loadedSavedConfigs.isEmpty
+        )
         syncSteamState()
         refreshDisplays()
         observeDisplayChanges()
@@ -128,6 +132,11 @@ final class WallpaperCoordinator {
 
     func selectWebPage(url: URL) {
         select(content: .webPage(url), addToLibrary: true)
+    }
+
+    func completeFirstLaunchIntro() {
+        store.markFirstLaunchIntroCompleted()
+        shouldShowFirstLaunchIntro = false
     }
 
     func selectWebPage(url: URL, title: String?, previewImageURL: URL?) {

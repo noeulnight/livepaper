@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g filter="url(#softShadow)" stroke="#FFFFFF" stroke-width="24" stroke-linecap="butt" stroke-linejoin="round">
+    <path d="M512 310C575 368 580 445 512 510C444 445 449 368 512 310Z"/>
+    <path d="M706 453C679 533 602 572 520 525C548 439 622 410 706 453Z"/>
+    <path d="M318 453C402 410 476 439 504 525C422 572 345 533 318 453Z"/>
+    
+    <path d="M626 694C546 707 495 644 518 532C595 558 654 612 626 694Z"/>
+    <path d="M398 694C370 612 429 558 506 532C529 644 478 707 398 694Z"/>
+  </g>
+
+  <defs>
+    <filter id="softShadow" x="244" y="238" width="536" height="536" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+</svg>

@@ -54,6 +54,26 @@ final class WallpaperSettingsStoreTests: XCTestCase {
         XCTAssertFalse(preferences.muteOnFullscreen)
     }
 
+    func testFirstLaunchIntroDefaultsToVisibleForNewUsers() {
+        let store = WallpaperSettingsStore(defaults: defaults)
+
+        XCTAssertTrue(store.shouldShowFirstLaunchIntro(hasExistingWallpapers: false))
+    }
+
+    func testMarkFirstLaunchIntroCompletedHidesIntro() {
+        let store = WallpaperSettingsStore(defaults: defaults)
+
+        store.markFirstLaunchIntroCompleted()
+
+        XCTAssertFalse(store.shouldShowFirstLaunchIntro(hasExistingWallpapers: false))
+    }
+
+    func testExistingWallpapersCompleteFirstLaunchIntro() {
+        let store = WallpaperSettingsStore(defaults: defaults)
+
+        XCTAssertFalse(store.shouldShowFirstLaunchIntro(hasExistingWallpapers: true))
+        XCTAssertFalse(store.shouldShowFirstLaunchIntro(hasExistingWallpapers: false))
+    }
 }
 
 private struct LegacySavedWallpaperConfig: Codable {

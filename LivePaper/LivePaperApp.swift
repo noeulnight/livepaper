@@ -13,7 +13,7 @@ struct LivePaperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("LivePaper", systemImage: "play.rectangle.on.rectangle") {
+        MenuBarExtra("LivePaper", image: "MenuBarIcon") {
             MenuBarControls(coordinator: appDelegate.coordinator)
         }
         .menuBarExtraStyle(.window)
@@ -37,13 +37,17 @@ struct LivePaperApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let coordinator = WallpaperCoordinator()
+    private static let introPreviewArgument = "--livepaper-preview-intro"
+
+    lazy var coordinator: WallpaperCoordinator = Self.makeCoordinator()
     private var didRestoreSavedWallpapers = false
     private var windowCloseObserver: NSObjectProtocol?
+    private var introWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
         observeSettingsWindowLifecycle()
+        showIntroWindowIfNeeded()
         restoreSavedWallpapersOnLaunch()
     }
 
@@ -54,7 +58,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func showIntroWindowIfNeeded() {
+        guard coordinator.shouldShowFirstLaunchIntro else {
+            return
+        }
+
+        NSApplication.shared.setActivationPolicy(.regular)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 640),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Welcome to LivePaper"
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = false
+        window.isMovableByWindowBackground = true
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(
+            rootView: FirstLaunchIntroView(
+                launchAtLoginEnabled: coordinator.loginItemStatus.isRegistered,
+                onLaunchAtLoginChanged: { [weak self] isEnabled in
+                    self?.coordinator.setLaunchAtLoginEnabled(isEnabled)
+                },
+                onAddWallpaper: { [weak self] in
+                    self?.completeIntroAndOpenAddWallpaper()
+                },
+                onSkip: { [weak self] in
+                    self?.completeIntroAndCloseIntroWindow()
+                }
+            )
+        )
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        introWindow = window
+    }
+
+    private func completeIntroAndOpenAddWallpaper() {
+        completeIntroAndCloseIntroWindow()
+        openMainWindow()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .livePaperOpenAddWallpaper, object: nil)
+        }
+    }
+
+    private func completeIntroAndCloseIntroWindow() {
+        coordinator.completeFirstLaunchIntro()
+        introWindow?.close()
+        introWindow = nil
+        Self.hideDockIconIfSettingsWindowIsClosed()
+    }
+
+    private func openMainWindow() {
+        NSApplication.shared.setActivationPolicy(.regular)
+
+        if let window = NSApplication.shared.windows.first(where: { Self.isSettingsWindow($0) }) {
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 620),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "LivePaper"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: ContentView(coordinator: coordinator))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private static func makeCoordinator() -> WallpaperCoordinator {
+        guard isIntroPreviewLaunch else {
+            return WallpaperCoordinator()
+        }
+
+        let suiteName = "LivePaperIntroPreview-\(ProcessInfo.processInfo.processIdentifier)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            return WallpaperCoordinator()
+        }
+
+        defaults.removePersistentDomain(forName: suiteName)
+        return WallpaperCoordinator(
+            store: WallpaperSettingsStore(defaults: defaults),
+            loginItemController: LoginItemController(service: PreviewLoginItemService())
+        )
+    }
+
+    private static var isIntroPreviewLaunch: Bool {
+        CommandLine.arguments.contains(introPreviewArgument)
+    }
+
     private func restoreSavedWallpapersOnLaunch() {
+        guard !Self.isIntroPreviewLaunch else {
+            return
+        }
+
         guard !didRestoreSavedWallpapers, coordinator.hasSavedWallpapers else {
             return
         }
@@ -94,6 +202,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static func isSettingsWindow(_ window: NSWindow) -> Bool {
         window.title == "LivePaper"
+    }
+}
+
+private final class PreviewLoginItemService: LoginItemServiceManaging {
+    private var registrationStatus: LoginItemStatus.RegistrationStatus = .notRegistered
+
+    var status: LoginItemStatus.RegistrationStatus {
+        registrationStatus
+    }
+
+    func register() throws {
+        registrationStatus = .enabled
+    }
+
+    func unregister() throws {
+        registrationStatus = .notRegistered
     }
 }
 
@@ -163,8 +287,14 @@ private struct MenuBarControls: View {
 
             Spacer(minLength: 0)
 
-            MenuBarCircleButton(systemImage: "gearshape") {
-                openSettings()
+            HStack(spacing: 8) {
+                MenuBarCircleButton(systemImage: "gearshape", accessibilityLabel: "Settings") {
+                    openSettings()
+                }
+
+                MenuBarCircleButton(systemImage: "power", accessibilityLabel: "Quit") {
+                    quitApp()
+                }
             }
         }
     }
@@ -299,19 +429,21 @@ private struct MenuBarControls: View {
 
     private func openSettings() {
         NSApplication.shared.setActivationPolicy(.regular)
-        NotificationCenter.default.post(name: .livePaperSelectSettingsTab, object: nil)
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
         dismiss()
 
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .livePaperSelectSettingsTab, object: nil)
             bringMainWindowForward(orderRegardless: false)
 
             DispatchQueue.main.async {
                 bringMainWindowForward(orderRegardless: true)
             }
         }
+    }
+
+    private func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 
     private func bringMainWindowForward(orderRegardless: Bool) {
@@ -371,6 +503,7 @@ private struct MenuBarControls: View {
 
 extension Notification.Name {
     static let livePaperSelectSettingsTab = Notification.Name("LivePaperSelectSettingsTab")
+    static let livePaperOpenAddWallpaper = Notification.Name("LivePaperOpenAddWallpaper")
 }
 
 private struct MenuBarWallpaperBackground: View {
@@ -413,6 +546,7 @@ private struct MenuBarWallpaperBackground: View {
 
 private struct MenuBarCircleButton: View {
     let systemImage: String
+    let accessibilityLabel: String
     let action: () -> Void
 
     var body: some View {
@@ -428,6 +562,8 @@ private struct MenuBarCircleButton: View {
                 }
         }
         .buttonStyle(.plain)
+        .help(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
