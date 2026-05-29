@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		1A2B3C4D5E6F708192A0B1CA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0FBF0B9D2FC90AE700A79E58 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0FBF0BA42FC90AE700A79E58;
+			remoteInfo = LivePaper;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		0FBF0BA52FC90AE700A79E58 /* LivePaper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LivePaper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A2B3C4D5E6F708192A0B1C2 /* LivePaperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LivePaperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = LivePaper;
 			sourceTree = "<group>";
 		};
+		1A2B3C4D5E6F708192A0B1C3 /* LivePaperTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LivePaperTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		0FBF0BA22FC90AE700A79E58 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A2B3C4D5E6F708192A0B1C4 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				0FBF0BA72FC90AE700A79E58 /* LivePaper */,
+				1A2B3C4D5E6F708192A0B1C3 /* LivePaperTests */,
 				0FBF0BA62FC90AE700A79E58 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				0FBF0BA52FC90AE700A79E58 /* LivePaper.app */,
+				1A2B3C4D5E6F708192A0B1C2 /* LivePaperTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = 0FBF0BA52FC90AE700A79E58 /* LivePaper.app */;
 			productType = "com.apple.product-type.application";
 		};
+		1A2B3C4D5E6F708192A0B1C5 /* LivePaperTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A2B3C4D5E6F708192A0B1C6 /* Build configuration list for PBXNativeTarget "LivePaperTests" */;
+			buildPhases = (
+				1A2B3C4D5E6F708192A0B1C7 /* Sources */,
+				1A2B3C4D5E6F708192A0B1C4 /* Frameworks */,
+				1A2B3C4D5E6F708192A0B1C8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1A2B3C4D5E6F708192A0B1C9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1A2B3C4D5E6F708192A0B1C3 /* LivePaperTests */,
+			);
+			name = LivePaperTests;
+			packageProductDependencies = (
+			);
+			productName = LivePaperTests;
+			productReference = 1A2B3C4D5E6F708192A0B1C2 /* LivePaperTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					0FBF0BA42FC90AE700A79E58 = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					1A2B3C4D5E6F708192A0B1C5 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 0FBF0BA42FC90AE700A79E58;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				0FBF0BA42FC90AE700A79E58 /* LivePaper */,
+				1A2B3C4D5E6F708192A0B1C5 /* LivePaperTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0FBF0BA32FC90AE700A79E58 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A2B3C4D5E6F708192A0B1C8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1A2B3C4D5E6F708192A0B1C7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1A2B3C4D5E6F708192A0B1C9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0FBF0BA42FC90AE700A79E58 /* LivePaper */;
+			targetProxy = 1A2B3C4D5E6F708192A0B1CA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		0FBF0BAE2FC90AE800A79E58 /* Debug */ = {
@@ -307,6 +382,64 @@
 			};
 			name = Release;
 		};
+		1A2B3C4D5E6F708192A0B1CB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2B782JJGJ2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundlePackageType = BNDL;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = so.lth.LivePaperTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LivePaper.app/Contents/MacOS/LivePaper";
+			};
+			name = Debug;
+		};
+		1A2B3C4D5E6F708192A0B1CC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2B782JJGJ2;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundlePackageType = BNDL;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = so.lth.LivePaperTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LivePaper.app/Contents/MacOS/LivePaper";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -324,6 +457,15 @@
 			buildConfigurations = (
 				0FBF0BB12FC90AE800A79E58 /* Debug */,
 				0FBF0BB22FC90AE800A79E58 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A2B3C4D5E6F708192A0B1C6 /* Build configuration list for PBXNativeTarget "LivePaperTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A2B3C4D5E6F708192A0B1CB /* Debug */,
+				1A2B3C4D5E6F708192A0B1CC /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
