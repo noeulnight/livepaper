@@ -5,6 +5,7 @@ import WebKit
 final class WebWallpaperController {
     private var webView: WKWebView?
     private var loadedURL: URL?
+    private var currentConfig: WallpaperConfig?
 
     func start(config: WallpaperConfig, in contentView: NSView) {
         stop()
@@ -22,19 +23,27 @@ final class WebWallpaperController {
 
         load(config: config, in: webView)
         self.webView = webView
+        self.currentConfig = config
     }
 
     func pause() {
+        webView?.isHidden = true
+        webView?.evaluateJavaScript(WebWallpaperPlaybackScript.pauseScript)
     }
 
     func resume() {
         webView?.isHidden = false
+        guard let currentConfig else {
+            return
+        }
+        webView?.evaluateJavaScript(WebWallpaperPlaybackScript.resumeScript(shouldResumeYouTube: YouTubeEmbedURL.isEmbedURL(currentConfig.content.url)))
     }
 
     func apply(config: WallpaperConfig) {
         guard let webView else {
             return
         }
+        currentConfig = config
         guard loadedURL != config.content.url else {
             applyPlaybackSettings(config: config, in: webView)
             return
@@ -47,6 +56,7 @@ final class WebWallpaperController {
         webView?.removeFromSuperview()
         webView = nil
         loadedURL = nil
+        currentConfig = nil
     }
 
     private func load(config: WallpaperConfig, in webView: WKWebView) {
@@ -155,5 +165,40 @@ final class WebWallpaperController {
             .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
+enum WebWallpaperPlaybackScript {
+    static let pauseScript = """
+    (function() {
+      if (typeof player !== "undefined" && player && typeof player.pauseVideo === "function") {
+        player.pauseVideo();
+      }
+      document.querySelectorAll("video, audio").forEach(function(element) {
+        if (typeof element.pause === "function") {
+          element.dataset.livePaperPaused = element.paused ? "false" : "true";
+          element.pause();
+        }
+      });
+    })();
+    """
+
+    static func resumeScript(shouldResumeYouTube: Bool) -> String {
+        let youtubeCommand = shouldResumeYouTube ? """
+          if (typeof player !== "undefined" && player && typeof player.playVideo === "function") {
+            player.playVideo();
+          }
+        """ : ""
+
+        return """
+        (function() {
+        \(youtubeCommand)
+          document.querySelectorAll("video, audio").forEach(function(element) {
+            if (element.dataset.livePaperPaused === "true" && typeof element.play === "function") {
+              element.play().catch(function() {});
+            }
+          });
+        })();
+        """
     }
 }

@@ -21,7 +21,7 @@ struct DisplaysTab: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(GlassProminentButtonStyle())
-                .focusable(false)
+                .focusEffectDisabled()
             }
 
             displayList
@@ -52,9 +52,12 @@ struct DisplaysTab: View {
                         wallpaperItem: coordinator.displayWallpaperItem(for: display.id),
                         description: displayRuntimeDescription(for: display),
                         isEnabled: displayRuntimeBinding(for: display.id),
-                        isAudioDisplay: coordinator.audioDisplayID == display.id,
-                        audioSystemImage: audioDisplaySystemImage(for: display.id)
+                        isAudioDisplay: isAudibleDisplay(display.id),
+                        audioSystemImage: audioDisplaySystemImage(for: display.id),
+                        audioHelpText: audioDisplayHelpText(for: display.id)
                     ) {
+                        DisplayHighlighter.shared.highlight(displayID: display.id, duration: nil)
+                    } audioAction: {
                         Task {
                             await coordinator.setAudioDisplay(display.id)
                         }
@@ -109,5 +112,19 @@ struct DisplaysTab: View {
             return "speaker.slash.fill"
         }
         return coordinator.audioDisplayID == id ? "speaker.wave.2.fill" : "speaker"
+    }
+
+    private func isAudibleDisplay(_ id: DisplayID) -> Bool {
+        !coordinator.muted && coordinator.audioDisplayID == id
+    }
+
+    private func audioDisplayHelpText(for id: DisplayID) -> String {
+        if coordinator.muted {
+            return "Wallpaper audio is muted in Settings"
+        }
+        if coordinator.audioDisplayID == id {
+            return "This display is used for wallpaper audio"
+        }
+        return "Use this display for wallpaper audio"
     }
 }

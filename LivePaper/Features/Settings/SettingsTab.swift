@@ -159,6 +159,7 @@ struct SettingsTab: View {
                     }
                 }
             }
+            .padding(.bottom, LivePaperBottomTabMetrics.scrollContentTailPadding)
         }
         .onChange(of: coordinator.scaleMode) { _, _ in
             saveRuntimeSettings()

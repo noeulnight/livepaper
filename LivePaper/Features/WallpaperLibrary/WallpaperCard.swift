@@ -48,10 +48,7 @@ struct WallpaperCard: View {
     }
 
     private var cardDescription: String {
-        guard item.savedDisplayCount > 0 else {
-            return item.subtitle
-        }
-        return "\(item.subtitle) · \(item.savedDisplayCount) saved"
+        item.subtitle
     }
 }
 

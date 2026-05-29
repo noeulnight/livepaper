@@ -37,6 +37,9 @@ struct ContentView: View {
                 await coordinator.shutdown()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .livePaperSelectSettingsTab)) { _ in
+            selectedNavigationTab = .settings
+        }
         .sheet(isPresented: $isWallpaperDetailPresented) {
             if let selectedGalleryItem {
                 WallpaperDetailSheet(coordinator: coordinator, item: selectedGalleryItem)

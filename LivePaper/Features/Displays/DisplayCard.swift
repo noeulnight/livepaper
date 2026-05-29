@@ -7,6 +7,8 @@ struct DisplayCard: View {
     @Binding var isEnabled: Bool
     let isAudioDisplay: Bool
     let audioSystemImage: String
+    let audioHelpText: String
+    let highlightAction: () -> Void
     let audioAction: () -> Void
 
     var body: some View {
@@ -46,7 +48,7 @@ struct DisplayCard: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                        .focusable(false)
+                        .focusEffectDisabled()
                         .help(isEnabled ? "Stop this display" : "Start this display")
 
                     Spacer()
@@ -66,8 +68,8 @@ struct DisplayCard: View {
                             }
                     }
                     .buttonStyle(.plain)
-                    .focusable(false)
-                    .help("Use this display for wallpaper audio")
+                    .focusEffectDisabled()
+                    .help(audioHelpText)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 10)
@@ -78,6 +80,14 @@ struct DisplayCard: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isEnabled ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.14), lineWidth: isEnabled ? 1.5 : 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onHover { isHovered in
+            if isHovered {
+                highlightAction()
+            } else {
+                DisplayHighlighter.shared.hide(displayID: display.id)
+            }
         }
         .shadow(color: .black.opacity(0.24), radius: 10, y: 5)
     }

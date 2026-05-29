@@ -79,9 +79,9 @@ enum WallpaperEngineImportError: LocalizedError {
         case .unsupportedVideoFormat(let fileURL):
             return "LivePaper can import Wallpaper Engine video wallpapers only when they are .mp4, .mov, or .m4v files: \(fileURL.lastPathComponent)"
         case .unsupportedWallpaperType(let type):
-            return "LivePaper does not support Wallpaper Engine \(type) wallpapers yet. Import supports web and video wallpapers."
+            return "LivePaper cannot import Wallpaper Engine \(type) wallpapers yet. Web and video wallpapers are supported; scene and application wallpapers need a separate renderer."
         case .unsupportedPackageOnly:
-            return "LivePaper cannot import packaged Wallpaper Engine scene/application files yet. Import supports web and video wallpapers."
+            return "LivePaper cannot import packaged Wallpaper Engine scene/application files yet. Web and video wallpapers are supported; package-only items need a separate renderer."
         }
     }
 }

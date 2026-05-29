@@ -66,4 +66,79 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
 
         XCTAssertEqual(restoredConfig, config)
     }
+
+    func testApplyRuntimeConfigsSkipsRuntimeUpdateForPausedDisplays() async throws {
+        let runtime = RecordingWallpaperRuntime()
+        let controller = WallpaperRuntimeController(runtime: runtime)
+        let displayID = DisplayID(uuid: "display-a")
+        let config = WallpaperConfig(
+            displayID: displayID,
+            content: .video(URL(fileURLWithPath: "/tmp/wallpaper.mov"))
+        )
+
+        try await controller.applyRuntimeConfigs(
+            [displayID: config],
+            audioOwnerID: displayID,
+            fullscreenDisplayIDs: [displayID],
+            pausedDisplayIDs: [displayID],
+            orderedDisplayIDs: { Array($0) }
+        )
+
+        XCTAssertEqual(controller.activeConfigs[displayID], config)
+        XCTAssertEqual(controller.pausedDisplayIDs, [displayID])
+        XCTAssertEqual(runtime.pauseCalls, [displayID])
+        XCTAssertTrue(runtime.updateCalls.isEmpty)
+    }
+
+    func testApplyRuntimeConfigsUpdatesRuntimeAfterPausedDisplayBecomesActive() async throws {
+        let runtime = RecordingWallpaperRuntime()
+        let controller = WallpaperRuntimeController(runtime: runtime)
+        let displayID = DisplayID(uuid: "display-a")
+        let config = WallpaperConfig(
+            displayID: displayID,
+            content: .video(URL(fileURLWithPath: "/tmp/wallpaper.mov"))
+        )
+
+        try await controller.applyRuntimeConfigs(
+            [displayID: config],
+            audioOwnerID: displayID,
+            fullscreenDisplayIDs: [displayID],
+            pausedDisplayIDs: [displayID],
+            orderedDisplayIDs: { Array($0) }
+        )
+        try await controller.applyRuntimeConfigs(
+            [displayID: config],
+            audioOwnerID: displayID,
+            fullscreenDisplayIDs: [],
+            orderedDisplayIDs: { Array($0) }
+        )
+
+        XCTAssertTrue(controller.pausedDisplayIDs.isEmpty)
+        XCTAssertEqual(runtime.pauseCalls, [displayID])
+        XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID])
+    }
+}
+
+@MainActor
+private final class RecordingWallpaperRuntime: WallpaperRuntime {
+    private(set) var updateCalls: [WallpaperConfig] = []
+    private(set) var pauseCalls: [DisplayID] = []
+
+    func start(config: WallpaperConfig) async throws {
+        updateCalls.append(config)
+    }
+
+    func stop(displayID: DisplayID) async {}
+
+    func stopAll() async {}
+
+    func update(config: WallpaperConfig) async throws {
+        updateCalls.append(config)
+    }
+
+    func pause(displayID: DisplayID) async {
+        pauseCalls.append(displayID)
+    }
+
+    func resume(displayID: DisplayID) async {}
 }

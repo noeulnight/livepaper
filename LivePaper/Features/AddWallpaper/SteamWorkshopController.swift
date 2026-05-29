@@ -35,19 +35,19 @@ final class SteamWorkshopController {
         return result.content.withSecurityScopedBookmarks()
     }
 
-    func downloadWorkshop(url rawURL: String) async throws -> WallpaperContent {
-        resetDownloadLog()
+    func downloadWorkshop(url rawURL: String, onLogChange: (() -> Void)? = nil) async throws -> WallpaperContent {
+        resetDownloadLog(onLogChange: onLogChange)
         let downloader = SteamCMDWorkshopDownloader(
             steamCMDURL: steamCMDURL,
             loginMode: steamCMDLoginMode,
             username: steamUsername
         )
         let folderURL = try await downloader.downloadWorkshopItem(from: rawURL) { @MainActor [weak self] logChunk in
-            self?.appendDownloadLog(logChunk)
+            self?.appendDownloadLog(logChunk, onLogChange: onLogChange)
         }
-        appendDownloadLog("[LivePaper] Importing downloaded wallpaper.\n")
+        appendDownloadLog("[LivePaper] Importing downloaded wallpaper.\n", onLogChange: onLogChange)
         let result = try WallpaperEngineImporter().importWorkshopItem(from: rawURL, fallbackFolderURL: folderURL)
-        appendDownloadLog("[LivePaper] Imported: \(result.title ?? result.content.displayName)\n")
+        appendDownloadLog("[LivePaper] Imported: \(result.title ?? result.content.displayName)\n", onLogChange: onLogChange)
         return result.content.withSecurityScopedBookmarks()
     }
 
@@ -60,16 +60,18 @@ final class SteamWorkshopController {
         steamDownloadLog = ""
     }
 
-    private func resetDownloadLog() {
+    private func resetDownloadLog(onLogChange: (() -> Void)? = nil) {
         steamDownloadLog = ""
+        onLogChange?()
     }
 
-    private func appendDownloadLog(_ chunk: String) {
+    private func appendDownloadLog(_ chunk: String, onLogChange: (() -> Void)? = nil) {
         steamDownloadLog += chunk
 
         let maxLogCharacterCount = 20_000
         if steamDownloadLog.count > maxLogCharacterCount {
             steamDownloadLog = String(steamDownloadLog.suffix(maxLogCharacterCount))
         }
+        onLogChange?()
     }
 }

@@ -107,7 +107,7 @@ private final class ScreenSession {
     }
 
     func pause() {
-        hideRuntimeSurface()
+        pauseContent()
     }
 
     func resume() {
@@ -129,14 +129,9 @@ private final class ScreenSession {
         isVisible = false
     }
 
-    private func hideRuntimeSurface() {
-        guard isVisible else {
-            return
-        }
+    private func pauseContent() {
         playbackController?.pause()
         webController?.pause()
-        wallpaperWindow?.hide()
-        isVisible = false
     }
 
     private func showRuntimeSurface() {

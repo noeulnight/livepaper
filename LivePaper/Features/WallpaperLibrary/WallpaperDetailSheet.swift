@@ -6,6 +6,7 @@ struct WallpaperDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var presentedAlert: WallpaperDetailAlert?
     @State private var isDeleteHovered = false
+    @State private var selectedDisplayIDs: Set<DisplayID> = []
     let item: WallpaperGalleryItem
 
     var body: some View {
@@ -52,16 +53,23 @@ struct WallpaperDetailSheet: View {
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(coordinator.displays) { display in
-                                Toggle(isOn: displayBinding(for: display.id)) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(display.name)
-                                            .font(.callout.weight(.medium))
-                                        Text(display.frameDescription)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                Button {
+                                    toggleDisplaySelection(display.id)
+                                } label: {
+                                    WallpaperDetailDisplayRow(
+                                        display: display,
+                                        isSelected: selectedDisplayIDs.contains(display.id)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .focusable(false)
+                                .onHover { isHovered in
+                                    if isHovered {
+                                        DisplayHighlighter.shared.highlight(displayID: display.id, duration: nil)
+                                    } else {
+                                        DisplayHighlighter.shared.hide(displayID: display.id)
                                     }
                                 }
-                                .toggleStyle(.checkbox)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -69,7 +77,7 @@ struct WallpaperDetailSheet: View {
                 }
                 .padding(18)
                 .frame(maxWidth: .infinity)
-                .frame(height: 132, alignment: .topLeading)
+                .frame(height: displayPanelHeight, alignment: .topLeading)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -81,7 +89,7 @@ struct WallpaperDetailSheet: View {
                 HStack(spacing: 12) {
                     Button {
                         Task {
-                            await coordinator.applySelectedContent()
+                            await coordinator.applySelectedContent(to: selectedDisplayIDs)
                             if coordinator.lastError == nil {
                                 dismiss()
                             }
@@ -95,8 +103,8 @@ struct WallpaperDetailSheet: View {
                             .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .disabled(coordinator.selectedDisplayIDs.isEmpty)
-                    .opacity(coordinator.selectedDisplayIDs.isEmpty ? 0.55 : 1)
+                    .disabled(selectedDisplayIDs.isEmpty)
+                    .opacity(selectedDisplayIDs.isEmpty ? 0.55 : 1)
                     .focusable(false)
 
                     Button(role: .destructive) {
@@ -127,6 +135,12 @@ struct WallpaperDetailSheet: View {
             }
         }
         .frame(width: 420, height: 640)
+        .onAppear {
+            refreshSelectedDisplays()
+        }
+        .onChange(of: item.id) { _, _ in
+            refreshSelectedDisplays()
+        }
         .onChange(of: coordinator.lastError) { _, error in
             guard let error else {
                 return
@@ -160,22 +174,75 @@ struct WallpaperDetailSheet: View {
     }
 
     private var detailDescription: String {
-        if item.savedDisplayCount > 0 {
-            return "\(item.subtitle) - \(item.savedDisplayCount) saved"
-        }
-        return item.subtitle
+        item.subtitle
     }
 
-    private func displayBinding(for id: DisplayID) -> Binding<Bool> {
-        Binding {
-            coordinator.selectedDisplayIDs.contains(id)
-        } set: { isSelected in
+    private var displayPanelHeight: CGFloat {
+        let rowsHeight = CGFloat(max(coordinator.displays.count, 1)) * 40
+        return min(max(rowsHeight + 58, 126), 230)
+    }
+
+    private func toggleDisplaySelection(_ id: DisplayID) {
+        if selectedDisplayIDs.contains(id) {
+            selectedDisplayIDs.remove(id)
+        } else {
+            selectedDisplayIDs.insert(id)
+        }
+    }
+
+    private func refreshSelectedDisplays() {
+        coordinator.refreshDisplays()
+        let availableDisplayIDs = Set(coordinator.displays.map(\.id))
+        let savedDisplayIDs = coordinator.savedDisplayIDs(forGalleryItemID: item.id)
+            .intersection(availableDisplayIDs)
+
+        selectedDisplayIDs = savedDisplayIDs.isEmpty ? availableDisplayIDs : savedDisplayIDs
+    }
+}
+
+private struct WallpaperDetailDisplayRow: View {
+    let display: DisplayState
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "display")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 15)
+
+            Text(display.name)
+                .font(.system(size: 12, weight: .bold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Text("(\(display.frameDescription))")
+                .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
+                .foregroundStyle(isSelected ? .white.opacity(0.68) : .white.opacity(0.54))
+
+            Spacer(minLength: 0)
+
             if isSelected {
-                coordinator.selectedDisplayIDs.insert(id)
-            } else {
-                coordinator.selectedDisplayIDs.remove(id)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.accentColor.opacity(0.95))
             }
         }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 11)
+        .frame(maxWidth: .infinity)
+        .frame(height: 32)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isSelected ? Color.white.opacity(0.16) : Color.black.opacity(0.24))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: isSelected ? Color.accentColor.opacity(0.18) : .clear, radius: 8, y: 2)
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

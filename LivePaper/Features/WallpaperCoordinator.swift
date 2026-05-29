@@ -15,20 +15,21 @@ final class WallpaperCoordinator {
     private var displayObserver: NSObjectProtocol?
 
     private(set) var lastError: String?
+    private(set) var displays: [DisplayState] = []
+    private(set) var activeConfigs: [DisplayID: WallpaperConfig] = [:]
+    private(set) var pausedDisplayIDs: Set<DisplayID> = []
+    private(set) var steamDownloadLog = ""
+    private(set) var selectedContentName: String?
+    private(set) var selectedContentKind: WallpaperContent.Kind?
+    private(set) var selectedGalleryItemID: WallpaperGalleryItem.ID?
+    private(set) var hasSavedWallpapers = false
+    private(set) var galleryItems: [WallpaperGalleryItem] = []
 
-    var selectedDisplayIDs: Set<DisplayID> {
-        get { displaySelection.selectedDisplayIDs }
-        set { displaySelection.selectedDisplayIDs = newValue }
+    var selectedDisplayIDs: Set<DisplayID> = [] {
+        didSet {
+            displaySelection.selectedDisplayIDs = selectedDisplayIDs
+        }
     }
-
-    var displays: [DisplayState] { displaySelection.displays }
-    var activeConfigs: [DisplayID: WallpaperConfig] { runtimeController.activeConfigs }
-    var steamDownloadLog: String { steamController.steamDownloadLog }
-    var selectedContentName: String? { libraryModel.selectedContentName }
-    var selectedContentKind: WallpaperContent.Kind? { libraryModel.selectedContentKind }
-    var selectedGalleryItemID: WallpaperGalleryItem.ID? { libraryModel.selectedGalleryItemID }
-    var hasSavedWallpapers: Bool { !savedConfigs.isEmpty }
-    var galleryItems: [WallpaperGalleryItem] { libraryModel.galleryItems(savedConfigs: savedConfigs) }
 
     var scaleMode: ScaleMode = .fill
     var muted = false
@@ -38,18 +39,21 @@ final class WallpaperCoordinator {
     var muteOnFullscreen = false
 
     var audioDisplayID: DisplayID? {
-        get { displaySelection.audioDisplayID }
-        set { displaySelection.audioDisplayID = newValue }
+        didSet {
+            displaySelection.audioDisplayID = audioDisplayID
+        }
     }
 
-    var steamCMDLoginMode: SteamCMDLoginMode {
-        get { steamController.steamCMDLoginMode }
-        set { steamController.steamCMDLoginMode = newValue }
+    var steamCMDLoginMode: SteamCMDLoginMode = .anonymous {
+        didSet {
+            steamController.steamCMDLoginMode = steamCMDLoginMode
+        }
     }
 
-    var steamUsername: String {
-        get { steamController.steamUsername }
-        set { steamController.steamUsername = newValue }
+    var steamUsername = "" {
+        didSet {
+            steamController.steamUsername = steamUsername
+        }
     }
 
     init(runtime: WallpaperRuntime? = nil, store: WallpaperSettingsStore? = nil) {
@@ -73,8 +77,12 @@ final class WallpaperCoordinator {
         pauseOnBattery = loadedPreferences.pauseOnBattery
         pauseOnFullscreen = loadedPreferences.pauseOnFullscreen
         muteOnFullscreen = loadedPreferences.muteOnFullscreen
+        steamCMDLoginMode = steamController.steamCMDLoginMode
+        steamUsername = steamController.steamUsername
 
         libraryModel.syncSteamMetadataFromLocalFiles(savedConfigs: &savedConfigs)
+        syncLibraryState()
+        syncSteamState()
         refreshDisplays()
         observeDisplayChanges()
         observeSystemPolicyChanges()
@@ -92,6 +100,7 @@ final class WallpaperCoordinator {
 
     func refreshDisplays() {
         displaySelection.refreshDisplays()
+        syncDisplaySelectionState()
     }
 
     func selectVideo(url: URL) {
@@ -145,9 +154,14 @@ final class WallpaperCoordinator {
     @discardableResult
     func downloadSteamWorkshop(url rawURL: String) async -> Error? {
         do {
-            select(content: try await steamController.downloadWorkshop(url: rawURL), addToLibrary: true)
+            let content = try await steamController.downloadWorkshop(url: rawURL) { [weak self] in
+                self?.syncSteamState()
+            }
+            syncSteamState()
+            select(content: content, addToLibrary: true)
             return nil
         } catch {
+            syncSteamState()
             lastError = error.localizedDescription
             return error
         }
@@ -160,6 +174,7 @@ final class WallpaperCoordinator {
 
     func clearSteamDownloadLog() {
         steamController.clearDownloadLog()
+        syncSteamState()
     }
 
     func clearLastError() {
@@ -168,24 +183,38 @@ final class WallpaperCoordinator {
 
     func syncSteamMetadata() {
         libraryModel.syncSteamMetadataFromLocalFiles(savedConfigs: &savedConfigs)
+        syncLibraryState()
         lastError = nil
     }
 
     func selectGalleryItem(id: WallpaperGalleryItem.ID) {
         libraryModel.selectGalleryItem(id: id, savedConfigs: savedConfigs)
+        syncLibraryState()
         lastError = nil
     }
 
     func applySelectedContent() async {
+        await applySelectedContent(to: selectedDisplayIDs)
+    }
+
+    func applySelectedContent(to targetDisplayIDs: Set<DisplayID>) async {
         refreshDisplays()
         saveRuntimePreferences()
-        let targetIDs = selectedDisplayIDs.isEmpty ? Set(displays.map(\.id)) : selectedDisplayIDs
+        let availableDisplayIDs = Set(displays.map(\.id))
+        let targetIDs = targetDisplayIDs.intersection(availableDisplayIDs)
 
         do {
             guard let content = libraryModel.selectedContent else {
                 lastError = "Choose content first."
                 return
             }
+
+            guard !targetIDs.isEmpty else {
+                lastError = "Choose at least one display."
+                return
+            }
+
+            selectedDisplayIDs = targetIDs
 
             var updatedConfigs = activeConfigs
             let orderedTargetIDs = displaySelection.orderedDisplayIDs(from: targetIDs)
@@ -199,11 +228,18 @@ final class WallpaperCoordinator {
 
             try await applyRuntimeConfigs(updatedConfigs)
             store.save(configs: savedConfigs)
+            syncLibraryState()
             await refreshRuntimePolicy()
             lastError = nil
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    func savedDisplayIDs(forGalleryItemID id: WallpaperGalleryItem.ID) -> Set<DisplayID> {
+        Set(savedConfigs.compactMap { displayID, config in
+            config.content.galleryID == id ? displayID : nil
+        })
     }
 
     func restoreSavedWallpapers() async {
@@ -261,6 +297,10 @@ final class WallpaperCoordinator {
         activeConfigs[displayID] != nil
     }
 
+    func isDisplayPaused(_ displayID: DisplayID) -> Bool {
+        pausedDisplayIDs.contains(displayID)
+    }
+
     func activeContentName(for displayID: DisplayID) -> String? {
         activeConfigs[displayID]?.content.displayName
     }
@@ -287,14 +327,58 @@ final class WallpaperCoordinator {
         )
     }
 
+    func pauseDisplay(_ displayID: DisplayID) async {
+        guard activeConfigs[displayID] != nil else {
+            return
+        }
+
+        await runtimeController.pause(displayID: displayID)
+        syncRuntimeState()
+        lastError = nil
+    }
+
+    func resumeDisplay(_ displayID: DisplayID) async {
+        guard activeConfigs[displayID] != nil else {
+            return
+        }
+
+        runtimeController.removePausedDisplay(displayID)
+        await refreshActiveRuntimeConfigs()
+    }
+
+    func pauseAll() async {
+        for displayID in displaySelection.orderedDisplayIDs(from: Set(activeConfigs.keys)) {
+            await runtimeController.pause(displayID: displayID)
+        }
+        syncRuntimeState()
+        lastError = nil
+    }
+
+    func resumeAll() async {
+        for displayID in activeConfigs.keys {
+            runtimeController.removePausedDisplay(displayID)
+        }
+        await refreshActiveRuntimeConfigs()
+    }
+
+    func stopDisplay(displayID: DisplayID) async {
+        await runtimeController.stop(displayID: displayID)
+        syncRuntimeState()
+        updatePeriodicRuntimePolicyRefresh()
+        lastError = nil
+    }
+
     func stopAll() async {
         await runtimeController.stopAll()
+        syncRuntimeState()
+        updatePeriodicRuntimePolicyRefresh()
     }
 
     func forgetSavedWallpapers() async {
         await stopAll()
         savedConfigs.removeAll()
         store.removeAllConfigs()
+        syncLibraryState()
     }
 
     func deleteGalleryItem(id: WallpaperGalleryItem.ID) async {
@@ -304,9 +388,11 @@ final class WallpaperCoordinator {
         for displayID in displayIDsToStop {
             await runtimeController.stop(displayID: displayID)
         }
+        syncRuntimeState()
         await refreshActiveRuntimeConfigs()
 
         libraryModel.deleteGalleryItem(id: id, savedConfigs: &savedConfigs)
+        syncLibraryState()
         lastError = nil
     }
 
@@ -326,11 +412,35 @@ final class WallpaperCoordinator {
 
             try await applyRuntimeConfigs(updatedConfigs)
             store.save(configs: savedConfigs)
+            syncLibraryState()
             await refreshRuntimePolicy()
             lastError = nil
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    private func syncDisplaySelectionState() {
+        displays = displaySelection.displays
+        selectedDisplayIDs = displaySelection.selectedDisplayIDs
+        audioDisplayID = displaySelection.audioDisplayID
+    }
+
+    private func syncLibraryState() {
+        selectedContentName = libraryModel.selectedContentName
+        selectedContentKind = libraryModel.selectedContentKind
+        selectedGalleryItemID = libraryModel.selectedGalleryItemID
+        hasSavedWallpapers = !savedConfigs.isEmpty
+        galleryItems = libraryModel.galleryItems(savedConfigs: savedConfigs)
+    }
+
+    private func syncRuntimeState() {
+        activeConfigs = runtimeController.activeConfigs
+        pausedDisplayIDs = runtimeController.pausedDisplayIDs
+    }
+
+    private func syncSteamState() {
+        steamDownloadLog = steamController.steamDownloadLog
     }
 
     private func saveRuntimePreferences() {
@@ -360,6 +470,7 @@ final class WallpaperCoordinator {
             config = desiredConfig(displayID: displayID, content: selectedContent)
             savedConfigs[displayID] = WallpaperRuntimeController.savedConfig(from: config)
             store.save(configs: savedConfigs)
+            syncLibraryState()
         } else {
             lastError = "Choose a wallpaper first."
             return
@@ -379,8 +490,10 @@ final class WallpaperCoordinator {
 
     private func disableDisplay(_ displayID: DisplayID) async {
         await runtimeController.stop(displayID: displayID)
+        syncRuntimeState()
         savedConfigs.removeValue(forKey: displayID)
         store.save(configs: savedConfigs)
+        syncLibraryState()
 
         if audioDisplayID == displayID {
             audioDisplayID = displaySelection.fallbackAudioDisplayID(activeDisplayIDs: Set(activeConfigs.keys))
@@ -404,16 +517,25 @@ final class WallpaperCoordinator {
     }
 
     private func applyRuntimeConfigs(_ desiredConfigs: [DisplayID: WallpaperConfig]) async throws {
+        policyController.refreshDetectedPolicyState()
+
         let audioOwnerID = displaySelection.audioOwnerID(
             activeDisplayIDs: Set(desiredConfigs.keys),
             muted: muted
         )
+        let pausedDisplayIDs = Set(desiredConfigs.compactMap { displayID, config in
+            policyController.pauseReasons(for: displayID, config: config).isEmpty ? nil : displayID
+        })
+
         try await runtimeController.applyRuntimeConfigs(
             desiredConfigs,
             audioOwnerID: audioOwnerID,
             fullscreenDisplayIDs: policyController.fullscreenDisplayIDs,
+            pausedDisplayIDs: pausedDisplayIDs,
             orderedDisplayIDs: displaySelection.orderedDisplayIDs
         )
+        syncRuntimeState()
+        updatePeriodicRuntimePolicyRefresh()
     }
 
     private func refreshActiveRuntimeConfigs() async {
@@ -435,6 +557,7 @@ final class WallpaperCoordinator {
 
     private func select(content: WallpaperContent, addToLibrary: Bool) {
         libraryModel.select(content: content, addToLibrary: addToLibrary)
+        syncLibraryState()
         lastError = nil
     }
 
@@ -475,6 +598,7 @@ final class WallpaperCoordinator {
         for displayID in removedDisplayIDs {
             await runtimeController.stop(displayID: displayID)
         }
+        syncRuntimeState()
 
         await restoreSavedWallpapersForReappearedDisplays()
         await refreshActiveRuntimeConfigs()
@@ -525,6 +649,13 @@ final class WallpaperCoordinator {
         }
     }
 
+    private func updatePeriodicRuntimePolicyRefresh() {
+        policyController.updatePeriodicRefresh(isActive: !activeConfigs.isEmpty) { [weak self] in
+            guard let self else { return }
+            await self.refreshRuntimePolicy()
+        }
+    }
+
     private func applyRuntimePolicy() async {
         let activeDisplayIDs = Set(activeConfigs.keys)
         runtimeController.intersectPausedDisplays(with: activeDisplayIDs)
@@ -533,7 +664,7 @@ final class WallpaperCoordinator {
         for (displayID, config) in activeConfigs {
             let shouldPause = !policyController.pauseReasons(for: displayID, config: config).isEmpty
 
-            if shouldPause, !runtimeController.pausedDisplayIDs.contains(displayID) {
+            if shouldPause {
                 await runtimeController.pause(displayID: displayID)
             } else if !shouldPause {
                 do {

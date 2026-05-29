@@ -100,7 +100,7 @@ struct AddWallpaperSheet: View {
             }
             .frame(maxWidth: .infinity)
             .clipped()
-            .frame(height: 300, alignment: .top)
+            .frame(height: addModeContentHeight, alignment: .top)
 
             Spacer(minLength: 0)
 
@@ -120,7 +120,7 @@ struct AddWallpaperSheet: View {
             .focusable(false)
         }
         .padding(24)
-        .frame(width: 360, height: 560)
+        .frame(width: 360, height: addWallpaperSheetHeight)
         .onChange(of: selectedAddMode) { _, _ in
             errorMessage = nil
             resetDraftMetadata()
@@ -189,9 +189,9 @@ struct AddWallpaperSheet: View {
     }
 
     private var localVideoDropTitle: String {
-        selectedLocalVideoURL?.lastPathComponent ?? "Drop or click this section to select video"
-    }
+        selectedLocalVideoURL?.lastPathComponent ?? "Drop a video here, or click to choose one"
 
+    }
     private var localVideoDropSubtitle: String {
         selectedLocalVideoURL == nil
             ? "Supported formats: .mp4, .mov, .m4v, .mkv"
@@ -199,7 +199,7 @@ struct AddWallpaperSheet: View {
     }
 
     private var steamWorkshopContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Workshop URL")
                     .font(.caption.weight(.semibold))
@@ -207,6 +207,16 @@ struct AddWallpaperSheet: View {
                 TextField("https://steamcommunity.com/sharedfiles/filedetails/?id=123456789", text: $steamWorkshopAddress)
                     .textFieldStyle(.roundedBorder)
             }
+
+            Button {
+                openWallpaperEngineWorkshop()
+            } label: {
+                Label("Open Wallpaper Engine Workshop", systemImage: "arrow.up.right.square")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .focusable(false)
+            .help("Open the Steam Workshop page for Wallpaper Engine")
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Account Mode")
@@ -227,12 +237,38 @@ struct AddWallpaperSheet: View {
                     .textFieldStyle(.roundedBorder)
             }
 
+            workshopLimitations
+
             if isSteamCMDDownloading || !coordinator.steamDownloadLog.isEmpty {
                 steamDownloadLogView
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(.bottom, 2)
+    }
+
+    private var workshopLimitations: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Limitations", systemImage: "exclamationmark.triangle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Supports Wallpaper Engine web wallpapers and video files only.")
+                Text("Scene, application, and package-only wallpapers are not supported yet.")
+                Text("Some Workshop items require a Steam account session; anonymous download may fail.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.12))
+        }
     }
 
     private var webURLContent: some View {
@@ -250,6 +286,14 @@ struct AddWallpaperSheet: View {
             metadataEditor
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private var addModeContentHeight: CGFloat {
+        selectedAddMode == .steamWorkshop ? 360 : 300
+    }
+
+    private var addWallpaperSheetHeight: CGFloat {
+        selectedAddMode == .steamWorkshop ? 620 : 560
     }
 
     private var metadataEditor: some View {
@@ -512,6 +556,13 @@ struct AddWallpaperSheet: View {
         case .missingSteamUsername, .commandScriptDidNotRun, .notLoggedOn, .workshopDownloadFailed, .downloadedItemNotFound:
             return false
         }
+    }
+
+    private func openWallpaperEngineWorkshop() {
+        guard let url = URL(string: "https://steamcommunity.com/app/431960/workshop/") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     @discardableResult

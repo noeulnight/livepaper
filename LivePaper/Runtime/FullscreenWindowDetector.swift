@@ -25,7 +25,7 @@ enum FullscreenWindowDetector {
                 continue
             }
 
-            for display in displays where covers(windowBounds: windowBounds, displayBounds: display.bounds) {
+            for display in displays where covers(windowBounds: windowBounds, display: display) {
                 coveredDisplayIDs.insert(display.id)
             }
         }
@@ -36,6 +36,7 @@ enum FullscreenWindowDetector {
     private struct DisplayInfo {
         let id: DisplayID
         let bounds: CGRect
+        let visibleFrame: CGRect
     }
 
     private static func displayInfos() -> [DisplayInfo] {
@@ -50,7 +51,8 @@ enum FullscreenWindowDetector {
             let displayID = CGDirectDisplayID(number.uint32Value)
             return DisplayInfo(
                 id: id,
-                bounds: CGDisplayBounds(displayID)
+                bounds: CGDisplayBounds(displayID),
+                visibleFrame: screen.visibleFrame
             )
         }
     }
@@ -74,8 +76,13 @@ enum FullscreenWindowDetector {
         return CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary)
     }
 
-    private static func covers(windowBounds: CGRect, displayBounds: CGRect) -> Bool {
+    private static func covers(windowBounds: CGRect, display: DisplayInfo) -> Bool {
+        covers(windowBounds: windowBounds, displayBounds: display.bounds, visibleFrame: display.visibleFrame)
+    }
+
+    static func covers(windowBounds: CGRect, displayBounds: CGRect, visibleFrame: CGRect) -> Bool {
         covers(windowBounds: windowBounds, targetBounds: displayBounds, coverageThreshold: 0.98)
+            || covers(windowBounds: windowBounds, targetBounds: visibleFrame, coverageThreshold: 0.95)
     }
 
     private static func covers(

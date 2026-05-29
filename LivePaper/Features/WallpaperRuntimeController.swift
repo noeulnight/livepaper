@@ -52,10 +52,19 @@ final class WallpaperRuntimeController {
         _ desiredConfigs: [DisplayID: WallpaperConfig],
         audioOwnerID: DisplayID?,
         fullscreenDisplayIDs: Set<DisplayID>,
+        pausedDisplayIDs: Set<DisplayID>? = nil,
         orderedDisplayIDs: (Set<DisplayID>) -> [DisplayID]
     ) async throws {
+        let pausedDisplayIDs = pausedDisplayIDs ?? []
+
         for displayID in orderedDisplayIDs(Set(desiredConfigs.keys)) {
             guard let config = desiredConfigs[displayID] else {
+                continue
+            }
+
+            if pausedDisplayIDs.contains(displayID) {
+                await runtime.pause(displayID: displayID)
+                self.pausedDisplayIDs.insert(displayID)
                 continue
             }
 
@@ -66,6 +75,7 @@ final class WallpaperRuntimeController {
                     fullscreenDisplayIDs: fullscreenDisplayIDs
                 )
             )
+            self.pausedDisplayIDs.remove(displayID)
         }
 
         activeConfigs = desiredConfigs
