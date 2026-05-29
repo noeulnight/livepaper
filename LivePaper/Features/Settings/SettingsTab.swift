@@ -106,6 +106,25 @@ struct SettingsTab: View {
                     }
                 }
 
+                GlassSection(title: "Startup") {
+                    GlassSettingsRow(
+                        icon: "power",
+                        iconColor: .mint,
+                        title: "Launch at Login",
+                        subtitle: loginItemSubtitle
+                    ) {
+                        Toggle(
+                            "",
+                            isOn: Binding(
+                                get: { coordinator.loginItemStatus.isRegistered },
+                                set: { coordinator.setLaunchAtLoginEnabled($0) }
+                            )
+                        )
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                    }
+                }
+
                 GlassSection(title: "Saved Wallpapers") {
                     VStack(spacing: 0) {
                         GlassSettingsRow(
@@ -182,6 +201,20 @@ struct SettingsTab: View {
         .onChange(of: coordinator.muteOnFullscreen) { _, _ in
             saveRuntimeSettings()
         }
+        .onAppear {
+            coordinator.refreshLoginItemStatus()
+        }
+    }
+
+    private var loginItemSubtitle: String {
+        let status = coordinator.loginItemStatus
+        if status.requiresApproval {
+            return "Allow LivePaper in System Settings to finish enabling login startup."
+        }
+        if status.isRegistered {
+            return "Open LivePaper automatically at user login."
+        }
+        return "Register LivePaper with macOS Login Items."
     }
 
     private func saveRuntimeSettings() {

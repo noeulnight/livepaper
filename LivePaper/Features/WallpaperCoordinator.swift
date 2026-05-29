@@ -10,6 +10,7 @@ final class WallpaperCoordinator {
     private let runtimeController: WallpaperRuntimeController
     private let policyController: RuntimePolicyController
     private let steamController: SteamWorkshopController
+    private let loginItemController: LoginItemController
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
@@ -24,6 +25,7 @@ final class WallpaperCoordinator {
     private(set) var selectedGalleryItemID: WallpaperGalleryItem.ID?
     private(set) var hasSavedWallpapers = false
     private(set) var galleryItems: [WallpaperGalleryItem] = []
+    private(set) var loginItemStatus: LoginItemStatus
 
     var selectedDisplayIDs: Set<DisplayID> = [] {
         didSet {
@@ -56,9 +58,14 @@ final class WallpaperCoordinator {
         }
     }
 
-    init(runtime: WallpaperRuntime? = nil, store: WallpaperSettingsStore? = nil) {
+    init(
+        runtime: WallpaperRuntime? = nil,
+        store: WallpaperSettingsStore? = nil,
+        loginItemController: LoginItemController? = nil
+    ) {
         let resolvedStore = store ?? WallpaperSettingsStore()
         let resolvedRuntime = runtime ?? InAppWallpaperRuntime()
+        let resolvedLoginItemController = loginItemController ?? LoginItemController()
         let loadedSavedConfigs = resolvedStore.loadSavedConfigs()
         let loadedPreferences = resolvedStore.loadRuntimePreferences()
 
@@ -69,6 +76,8 @@ final class WallpaperCoordinator {
         self.runtimeController = WallpaperRuntimeController(runtime: resolvedRuntime)
         self.policyController = RuntimePolicyController()
         self.steamController = SteamWorkshopController(store: resolvedStore)
+        self.loginItemController = resolvedLoginItemController
+        self.loginItemStatus = resolvedLoginItemController.status()
 
         scaleMode = loadedPreferences.scaleMode
         muted = loadedPreferences.muted
@@ -185,6 +194,21 @@ final class WallpaperCoordinator {
         libraryModel.syncSteamMetadataFromLocalFiles(savedConfigs: &savedConfigs)
         syncLibraryState()
         lastError = nil
+    }
+
+    func refreshLoginItemStatus() {
+        loginItemStatus = loginItemController.status()
+    }
+
+    func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
+        do {
+            try loginItemController.setEnabled(isEnabled)
+            refreshLoginItemStatus()
+            lastError = nil
+        } catch {
+            refreshLoginItemStatus()
+            lastError = error.localizedDescription
+        }
     }
 
     func selectGalleryItem(id: WallpaperGalleryItem.ID) {

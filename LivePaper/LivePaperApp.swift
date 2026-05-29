@@ -39,10 +39,19 @@ struct LivePaperApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let coordinator = WallpaperCoordinator()
     private var didRestoreSavedWallpapers = false
+    private var windowCloseObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
+        observeSettingsWindowLifecycle()
         restoreSavedWallpapersOnLaunch()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let windowCloseObserver {
+            NotificationCenter.default.removeObserver(windowCloseObserver)
+            self.windowCloseObserver = nil
+        }
     }
 
     private func restoreSavedWallpapersOnLaunch() {
@@ -54,6 +63,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await coordinator.restoreSavedWallpapers()
         }
+    }
+
+    private func observeSettingsWindowLifecycle() {
+        windowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let window = notification.object as? NSWindow,
+                  Self.isSettingsWindow(window) else {
+                return
+            }
+
+            DispatchQueue.main.async {
+                Self.hideDockIconIfSettingsWindowIsClosed()
+            }
+        }
+    }
+
+    private static func hideDockIconIfSettingsWindowIsClosed() {
+        let hasVisibleSettingsWindow = NSApplication.shared.windows.contains { window in
+            isSettingsWindow(window) && window.isVisible
+        }
+
+        if !hasVisibleSettingsWindow {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
+    }
+
+    private static func isSettingsWindow(_ window: NSWindow) -> Bool {
+        window.title == "LivePaper"
     }
 }
 
@@ -258,6 +298,7 @@ private struct MenuBarControls: View {
     }
 
     private func openSettings() {
+        NSApplication.shared.setActivationPolicy(.regular)
         NotificationCenter.default.post(name: .livePaperSelectSettingsTab, object: nil)
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
