@@ -17,7 +17,7 @@ enum SteamWorkshopURLError: LocalizedError, Equatable {
     }
 }
 
-struct SteamWorkshopURL: Equatable, Sendable {
+nonisolated struct SteamWorkshopURL: Equatable, Sendable {
     let itemID: String
 
     init(_ rawValue: String) throws {

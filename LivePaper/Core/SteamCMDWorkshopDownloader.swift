@@ -50,7 +50,7 @@ enum SteamCMDLoginMode: String, CaseIterable, Identifiable, Sendable {
 }
 
 actor SteamCMDWorkshopDownloader {
-    typealias LogHandler = (String) async -> Void
+    typealias LogHandler = @Sendable (String) async -> Void
 
     private let appID = "431960"
     private let fileManager = FileManager.default
@@ -79,7 +79,7 @@ actor SteamCMDWorkshopDownloader {
             }
         }
 
-        let steamCMDInvocation = try resolveSteamCMDInvocation()
+        let steamCMDInvocation = try await resolveSteamCMDInvocation()
         let downloadRootURL = try livePaperDownloadRootURL()
         let logURL = downloadRootURL.appendingPathComponent("steamcmd-\(workshopURL.itemID).log")
         await logHandler?("[LivePaper] SteamCMD: \(steamCMDInvocation.steamCMDURL.path)\n")
@@ -102,6 +102,7 @@ actor SteamCMDWorkshopDownloader {
         process.standardOutput = outputPipe
         process.standardError = outputPipe
 
+        let terminationStream = processTerminationStream(process)
         try process.run()
         let outputTask = Task {
             while true {
@@ -123,15 +124,15 @@ actor SteamCMDWorkshopDownloader {
                 .data(using: .utf8) ?? Data()
         )
         inputPipe.fileHandleForWriting.closeFile()
-        process.waitUntilExit()
+        let terminationStatus = await processTerminationStatus(from: terminationStream, process: process)
         outputPipe.fileHandleForWriting.closeFile()
         _ = await outputTask.result
         outputHandle.synchronizeFile()
-        await logHandler?("[LivePaper] SteamCMD exited with code \(process.terminationStatus).\n")
+        await logHandler?("[LivePaper] SteamCMD exited with code \(terminationStatus).\n")
 
         let log = logExcerpt(from: logURL)
-        guard process.terminationStatus == 0 else {
-            throw SteamCMDDownloadError.commandFailed(status: process.terminationStatus, log: log)
+        guard terminationStatus == 0 else {
+            throw SteamCMDDownloadError.commandFailed(status: terminationStatus, log: log)
         }
 
         if let folderURL = downloadedItemFolderURL(
@@ -158,7 +159,7 @@ actor SteamCMDWorkshopDownloader {
         throw SteamCMDDownloadError.downloadedItemNotFound(itemID: workshopURL.itemID, log: log)
     }
 
-    private func resolveSteamCMDInvocation() throws -> SteamCMDInvocation {
+    private func resolveSteamCMDInvocation() async throws -> SteamCMDInvocation {
         if let explicitSteamCMDURL {
             if let invocation = invocation(for: explicitSteamCMDCandidates(from: explicitSteamCMDURL)) {
                 return invocation
@@ -171,7 +172,7 @@ actor SteamCMDWorkshopDownloader {
             .map(String.init)
             .map { URL(fileURLWithPath: $0).appendingPathComponent("steamcmd") }
 
-        let candidates = shellSteamCMDCandidates() + [
+        let candidates = await shellSteamCMDCandidates() + [
             URL(fileURLWithPath: "/opt/homebrew/bin/steamcmd"),
             URL(fileURLWithPath: "/usr/local/bin/steamcmd"),
             URL(fileURLWithPath: "/usr/bin/steamcmd")
@@ -233,7 +234,7 @@ actor SteamCMDWorkshopDownloader {
         return candidates
     }
 
-    private func shellSteamCMDCandidates() -> [URL] {
+    private func shellSteamCMDCandidates() async -> [URL] {
         let process = Process()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -244,13 +245,13 @@ actor SteamCMDWorkshopDownloader {
         process.standardError = errorPipe
 
         do {
+            let terminationStream = processTerminationStream(process)
             try process.run()
-            process.waitUntilExit()
+            let terminationStatus = await processTerminationStatus(from: terminationStream, process: process)
+            guard terminationStatus == 0 else {
+                return []
+            }
         } catch {
-            return []
-        }
-
-        guard process.terminationStatus == 0 else {
             return []
         }
 
@@ -260,6 +261,22 @@ actor SteamCMDWorkshopDownloader {
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .map { URL(fileURLWithPath: $0) }
+    }
+
+    private func processTerminationStream(_ process: Process) -> AsyncStream<Int32> {
+        AsyncStream { continuation in
+            process.terminationHandler = { process in
+                continuation.yield(process.terminationStatus)
+                continuation.finish()
+            }
+        }
+    }
+
+    private func processTerminationStatus(from stream: AsyncStream<Int32>, process: Process) async -> Int32 {
+        for await status in stream {
+            return status
+        }
+        return process.terminationStatus
     }
 
     private var steamCMDFinderScript: String {

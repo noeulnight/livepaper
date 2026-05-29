@@ -4,6 +4,7 @@ import WebKit
 @MainActor
 final class WebWallpaperController {
     private var webView: WKWebView?
+    private var loadedURL: URL?
 
     func start(config: WallpaperConfig, in contentView: NSView) {
         stop()
@@ -24,7 +25,6 @@ final class WebWallpaperController {
     }
 
     func pause() {
-        webView?.isHidden = true
     }
 
     func resume() {
@@ -35,6 +35,10 @@ final class WebWallpaperController {
         guard let webView else {
             return
         }
+        guard loadedURL != config.content.url else {
+            applyPlaybackSettings(config: config, in: webView)
+            return
+        }
         load(config: config, in: webView)
     }
 
@@ -42,6 +46,7 @@ final class WebWallpaperController {
         webView?.stopLoading()
         webView?.removeFromSuperview()
         webView = nil
+        loadedURL = nil
     }
 
     private func load(config: WallpaperConfig, in webView: WKWebView) {
@@ -54,6 +59,23 @@ final class WebWallpaperController {
         } else {
             webView.load(URLRequest(url: url))
         }
+        loadedURL = url
+    }
+
+    private func applyPlaybackSettings(config: WallpaperConfig, in webView: WKWebView) {
+        guard YouTubeEmbedURL.isEmbedURL(config.content.url) else {
+            return
+        }
+
+        let volume = Int(max(0, min(config.volume, 1)) * 100)
+        let muteCommand = config.muted ? "player.mute();" : "player.unMute();"
+        let script = """
+        if (typeof player !== "undefined" && player && typeof player.setVolume === "function") {
+          player.setVolume(\(volume));
+          \(muteCommand)
+        }
+        """
+        webView.evaluateJavaScript(script)
     }
 
     private func youtubeEmbedHTML(for url: URL, config: WallpaperConfig) -> String {
@@ -94,7 +116,7 @@ final class WebWallpaperController {
           </iframe>
           <script>
             function onYouTubeIframeAPIReady() {
-              new YT.Player("player", {
+                  window.player = new YT.Player("player", {
                 events: {
                   onReady: function(event) {
                     event.target.setVolume(\(volume));

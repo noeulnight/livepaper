@@ -11,15 +11,14 @@ import AppKit
 @main
 struct LivePaperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var coordinator = WallpaperCoordinator()
 
     var body: some Scene {
         MenuBarExtra("LivePaper", systemImage: "play.rectangle.on.rectangle") {
-            MenuBarControls(coordinator: coordinator)
+            MenuBarControls(coordinator: appDelegate.coordinator)
         }
 
         Window("LivePaper", id: "main") {
-            ContentView(coordinator: coordinator)
+            ContentView(coordinator: appDelegate.coordinator)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -27,7 +26,7 @@ struct LivePaperApp: App {
             CommandGroup(after: .appTermination) {
                 Button("Stop Wallpapers") {
                     Task {
-                        await coordinator.stopAll()
+                        await appDelegate.coordinator.stopAll()
                     }
                 }
                 .keyboardShortcut(".", modifiers: [.command, .shift])
@@ -37,8 +36,23 @@ struct LivePaperApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    let coordinator = WallpaperCoordinator()
+    private var didRestoreSavedWallpapers = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
+        restoreSavedWallpapersOnLaunch()
+    }
+
+    private func restoreSavedWallpapersOnLaunch() {
+        guard !didRestoreSavedWallpapers, coordinator.hasSavedWallpapers else {
+            return
+        }
+
+        didRestoreSavedWallpapers = true
+        Task {
+            await coordinator.restoreSavedWallpapers()
+        }
     }
 }
 

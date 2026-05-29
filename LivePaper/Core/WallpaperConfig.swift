@@ -8,6 +8,7 @@ struct WallpaperConfig: Codable, Equatable, Sendable {
     let muted: Bool
     let pauseOnBattery: Bool
     let pauseOnFullscreen: Bool
+    let muteOnFullscreen: Bool
 
     init(
         displayID: DisplayID,
@@ -16,7 +17,8 @@ struct WallpaperConfig: Codable, Equatable, Sendable {
         volume: Double = 1,
         muted: Bool = false,
         pauseOnBattery: Bool = true,
-        pauseOnFullscreen: Bool = true
+        pauseOnFullscreen: Bool = true,
+        muteOnFullscreen: Bool = false
     ) {
         self.displayID = displayID
         self.content = content
@@ -25,5 +27,6 @@ struct WallpaperConfig: Codable, Equatable, Sendable {
         self.muted = muted
         self.pauseOnBattery = pauseOnBattery
         self.pauseOnFullscreen = pauseOnFullscreen
+        self.muteOnFullscreen = muteOnFullscreen
     }
 }

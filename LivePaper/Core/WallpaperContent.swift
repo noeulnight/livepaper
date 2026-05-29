@@ -13,6 +13,8 @@ struct WallpaperContent: Codable, Equatable, Sendable {
     let previewImageURL: URL?
     let sourceURL: URL?
     let steamWorkshopID: String?
+    let bookmarkData: Data?
+    let readAccessBookmarkData: Data?
 
     init(
         kind: Kind,
@@ -21,7 +23,9 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         title: String? = nil,
         previewImageURL: URL? = nil,
         sourceURL: URL? = nil,
-        steamWorkshopID: String? = nil
+        steamWorkshopID: String? = nil,
+        bookmarkData: Data? = nil,
+        readAccessBookmarkData: Data? = nil
     ) {
         self.kind = kind
         self.url = url
@@ -30,6 +34,8 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         self.previewImageURL = previewImageURL
         self.sourceURL = sourceURL
         self.steamWorkshopID = steamWorkshopID?.nilIfBlank
+        self.bookmarkData = bookmarkData
+        self.readAccessBookmarkData = readAccessBookmarkData
     }
 
     static func video(_ url: URL) -> WallpaperContent {
@@ -57,7 +63,9 @@ struct WallpaperContent: Codable, Equatable, Sendable {
             title: title?.nilIfBlank ?? self.title,
             previewImageURL: previewImageURL ?? self.previewImageURL,
             sourceURL: sourceURL ?? self.sourceURL,
-            steamWorkshopID: steamWorkshopID?.nilIfBlank ?? self.steamWorkshopID
+            steamWorkshopID: steamWorkshopID?.nilIfBlank ?? self.steamWorkshopID,
+            bookmarkData: bookmarkData,
+            readAccessBookmarkData: readAccessBookmarkData
         )
     }
 
@@ -77,7 +85,66 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         if url.isFileURL {
             return url.lastPathComponent
         }
-        return url.absoluteString
+        guard let host = url.host?.removingWWWPrefix, !host.isEmpty else {
+            return "Web Wallpaper"
+        }
+        if host == "youtube-nocookie.com" || host == "youtube.com" {
+            return "YouTube Wallpaper"
+        }
+        return host
+    }
+
+    func withSecurityScopedBookmarks() -> WallpaperContent {
+        WallpaperContent(
+            kind: kind,
+            url: url,
+            readAccessURL: readAccessURL,
+            title: title,
+            previewImageURL: previewImageURL,
+            sourceURL: sourceURL,
+            steamWorkshopID: steamWorkshopID,
+            bookmarkData: bookmarkData ?? securityScopedBookmarkData(for: url),
+            readAccessBookmarkData: readAccessBookmarkData ?? readAccessURL.flatMap(securityScopedBookmarkData)
+        )
+    }
+
+    func resolvingSecurityScopedBookmarks() -> WallpaperContent {
+        let resolvedURL = bookmarkData.flatMap(resolveSecurityScopedBookmark) ?? url
+        let resolvedReadAccessURL = readAccessBookmarkData.flatMap(resolveSecurityScopedBookmark) ?? readAccessURL
+
+        return WallpaperContent(
+            kind: kind,
+            url: resolvedURL,
+            readAccessURL: resolvedReadAccessURL,
+            title: title,
+            previewImageURL: previewImageURL,
+            sourceURL: sourceURL,
+            steamWorkshopID: steamWorkshopID,
+            bookmarkData: bookmarkData,
+            readAccessBookmarkData: readAccessBookmarkData
+        )
+    }
+
+    private func securityScopedBookmarkData(for url: URL) -> Data? {
+        guard url.isFileURL else {
+            return nil
+        }
+
+        return try? url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+    }
+
+    private func resolveSecurityScopedBookmark(_ data: Data) -> URL? {
+        var isStale = false
+        return try? URL(
+            resolvingBookmarkData: data,
+            options: .withSecurityScope,
+            relativeTo: nil,
+            bookmarkDataIsStale: &isStale
+        )
     }
 }
 
@@ -86,9 +153,13 @@ private extension String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    var removingWWWPrefix: String {
+        hasPrefix("www.") ? String(dropFirst(4)) : self
+    }
 }
 
-enum YouTubeEmbedURL {
+nonisolated enum YouTubeEmbedURL {
     static func normalizedURL(for url: URL) -> URL {
         guard let videoID = videoID(from: url) else {
             return url
@@ -125,7 +196,7 @@ enum YouTubeEmbedURL {
         return isYouTubeHost && url.pathComponents.contains("embed")
     }
 
-    private static func videoID(from url: URL) -> String? {
+    static func videoID(from url: URL) -> String? {
         guard let host = url.host()?.lowercased() else {
             return nil
         }

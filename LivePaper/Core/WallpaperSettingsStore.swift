@@ -8,6 +8,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
     let muted: Bool
     let pauseOnBattery: Bool
     let pauseOnFullscreen: Bool
+    let muteOnFullscreen: Bool
 
     init(
         displayID: DisplayID,
@@ -16,7 +17,8 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         volume: Double,
         muted: Bool,
         pauseOnBattery: Bool,
-        pauseOnFullscreen: Bool
+        pauseOnFullscreen: Bool,
+        muteOnFullscreen: Bool = false
     ) {
         self.displayID = displayID
         self.content = content
@@ -25,6 +27,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         self.muted = muted
         self.pauseOnBattery = pauseOnBattery
         self.pauseOnFullscreen = pauseOnFullscreen
+        self.muteOnFullscreen = muteOnFullscreen
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -36,6 +39,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         case muted
         case pauseOnBattery
         case pauseOnFullscreen
+        case muteOnFullscreen
     }
 
     init(from decoder: Decoder) throws {
@@ -52,6 +56,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         muted = try container.decode(Bool.self, forKey: .muted)
         pauseOnBattery = try container.decode(Bool.self, forKey: .pauseOnBattery)
         pauseOnFullscreen = try container.decode(Bool.self, forKey: .pauseOnFullscreen)
+        muteOnFullscreen = try container.decodeIfPresent(Bool.self, forKey: .muteOnFullscreen) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -63,6 +68,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         try container.encode(muted, forKey: .muted)
         try container.encode(pauseOnBattery, forKey: .pauseOnBattery)
         try container.encode(pauseOnFullscreen, forKey: .pauseOnFullscreen)
+        try container.encode(muteOnFullscreen, forKey: .muteOnFullscreen)
     }
 }
 
@@ -74,8 +80,10 @@ final class WallpaperSettingsStore {
         static let scaleMode = "wallpaper.scaleMode"
         static let muted = "wallpaper.muted"
         static let volume = "wallpaper.volume"
+        static let audioDisplayID = "wallpaper.audioDisplayID"
         static let pauseOnBattery = "wallpaper.pauseOnBattery"
         static let pauseOnFullscreen = "wallpaper.pauseOnFullscreen"
+        static let muteOnFullscreen = "wallpaper.muteOnFullscreen"
         static let steamCMDPath = "steam.steamCMDPath"
         static let steamCMDBookmark = "steam.steamCMDBookmark"
         static let steamCMDLoginMode = "steam.loginMode"
@@ -93,8 +101,10 @@ final class WallpaperSettingsStore {
             scaleMode: ScaleMode(rawValue: defaults.string(forKey: Keys.scaleMode) ?? "") ?? .fill,
             muted: defaults.object(forKey: Keys.muted) as? Bool ?? false,
             volume: defaults.object(forKey: Keys.volume) as? Double ?? 1,
+            audioDisplayID: defaults.string(forKey: Keys.audioDisplayID).map(DisplayID.init(uuid:)),
             pauseOnBattery: defaults.object(forKey: Keys.pauseOnBattery) as? Bool ?? true,
-            pauseOnFullscreen: defaults.object(forKey: Keys.pauseOnFullscreen) as? Bool ?? true
+            pauseOnFullscreen: defaults.object(forKey: Keys.pauseOnFullscreen) as? Bool ?? true,
+            muteOnFullscreen: defaults.object(forKey: Keys.muteOnFullscreen) as? Bool ?? false
         )
     }
 
@@ -102,8 +112,14 @@ final class WallpaperSettingsStore {
         defaults.set(preferences.scaleMode.rawValue, forKey: Keys.scaleMode)
         defaults.set(preferences.muted, forKey: Keys.muted)
         defaults.set(preferences.volume, forKey: Keys.volume)
+        if let audioDisplayID = preferences.audioDisplayID {
+            defaults.set(audioDisplayID.uuid, forKey: Keys.audioDisplayID)
+        } else {
+            defaults.removeObject(forKey: Keys.audioDisplayID)
+        }
         defaults.set(preferences.pauseOnBattery, forKey: Keys.pauseOnBattery)
         defaults.set(preferences.pauseOnFullscreen, forKey: Keys.pauseOnFullscreen)
+        defaults.set(preferences.muteOnFullscreen, forKey: Keys.muteOnFullscreen)
     }
 
     func loadSavedConfigs() -> [DisplayID: SavedWallpaperConfig] {
@@ -112,7 +128,21 @@ final class WallpaperSettingsStore {
             return [:]
         }
 
-        return Dictionary(uniqueKeysWithValues: configs.map { ($0.displayID, $0) })
+        return Dictionary(
+            uniqueKeysWithValues: configs.map {
+                let resolvedConfig = SavedWallpaperConfig(
+                    displayID: $0.displayID,
+                    content: $0.content.resolvingSecurityScopedBookmarks(),
+                    scaleMode: $0.scaleMode,
+                    volume: $0.volume,
+                    muted: $0.muted,
+                    pauseOnBattery: $0.pauseOnBattery,
+                    pauseOnFullscreen: $0.pauseOnFullscreen,
+                    muteOnFullscreen: $0.muteOnFullscreen
+                )
+                return (resolvedConfig.displayID, resolvedConfig)
+            }
+        )
     }
 
     func save(configs: [DisplayID: SavedWallpaperConfig]) {
@@ -129,7 +159,7 @@ final class WallpaperSettingsStore {
             return []
         }
 
-        return contents
+        return contents.map { $0.resolvingSecurityScopedBookmarks() }
     }
 
     func save(library: [WallpaperContent]) {
@@ -194,6 +224,8 @@ struct RuntimePreferences: Equatable, Sendable {
     var scaleMode: ScaleMode
     var muted: Bool
     var volume: Double
+    var audioDisplayID: DisplayID?
     var pauseOnBattery: Bool
     var pauseOnFullscreen: Bool
+    var muteOnFullscreen: Bool
 }
