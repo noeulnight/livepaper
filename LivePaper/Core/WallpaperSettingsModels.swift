@@ -80,4 +80,5 @@ struct RuntimePreferences: Equatable, Sendable {
     var pauseOnBattery: Bool
     var pauseOnFullscreen: Bool
     var muteOnFullscreen: Bool
+    var applyLockScreenAutomatically: Bool
 }

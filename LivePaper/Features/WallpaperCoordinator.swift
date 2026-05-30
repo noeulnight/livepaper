@@ -11,6 +11,7 @@ final class WallpaperCoordinator {
     private let policyController: RuntimePolicyController
     private let steamController: SteamWorkshopController
     private let loginItemController: LoginItemController
+    private let lockScreenExporter: AerialLockScreenExporter
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
@@ -40,6 +41,7 @@ final class WallpaperCoordinator {
     var pauseOnBattery = true
     var pauseOnFullscreen = true
     var muteOnFullscreen = false
+    var applyLockScreenAutomatically = true
 
     var audioDisplayID: DisplayID? {
         didSet {
@@ -78,6 +80,7 @@ final class WallpaperCoordinator {
         self.policyController = RuntimePolicyController()
         self.steamController = SteamWorkshopController(store: resolvedStore)
         self.loginItemController = resolvedLoginItemController
+        self.lockScreenExporter = AerialLockScreenExporter()
         self.loginItemStatus = resolvedLoginItemController.status()
 
         scaleMode = loadedPreferences.scaleMode
@@ -87,6 +90,7 @@ final class WallpaperCoordinator {
         pauseOnBattery = loadedPreferences.pauseOnBattery
         pauseOnFullscreen = loadedPreferences.pauseOnFullscreen
         muteOnFullscreen = loadedPreferences.muteOnFullscreen
+        applyLockScreenAutomatically = loadedPreferences.applyLockScreenAutomatically
         steamCMDLoginMode = steamController.steamCMDLoginMode
         steamUsername = steamController.steamUsername
 
@@ -226,6 +230,27 @@ final class WallpaperCoordinator {
         lastError = nil
     }
 
+    func canExportLockScreenWallpaper(galleryItemID: WallpaperGalleryItem.ID) -> Bool {
+        guard let content = libraryModel.content(forGalleryItemID: galleryItemID, savedConfigs: savedConfigs) else {
+            return false
+        }
+        return lockScreenExporter.supportsExport(content)
+    }
+
+    func exportLockScreenWallpaper(galleryItemID: WallpaperGalleryItem.ID) async {
+        guard let content = libraryModel.content(forGalleryItemID: galleryItemID, savedConfigs: savedConfigs) else {
+            lastError = "Choose a wallpaper first."
+            return
+        }
+
+        do {
+            try await lockScreenExporter.export(content: content.resolvingSecurityScopedBookmarks())
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func applySelectedContent() async {
         await applySelectedContent(to: selectedDisplayIDs)
     }
@@ -263,6 +288,7 @@ final class WallpaperCoordinator {
             store.save(configs: savedConfigs)
             syncLibraryState()
             await refreshRuntimePolicy()
+            try await exportLockScreenWallpaperIfNeeded(for: content)
             lastError = nil
         } catch {
             lastError = error.localizedDescription
@@ -485,9 +511,23 @@ final class WallpaperCoordinator {
                 audioDisplayID: audioDisplayID,
                 pauseOnBattery: pauseOnBattery,
                 pauseOnFullscreen: pauseOnFullscreen,
-                muteOnFullscreen: muteOnFullscreen
+                muteOnFullscreen: muteOnFullscreen,
+                applyLockScreenAutomatically: applyLockScreenAutomatically
             )
         )
+    }
+
+    private func exportLockScreenWallpaperIfNeeded(for content: WallpaperContent) async throws {
+        guard applyLockScreenAutomatically else {
+            return
+        }
+
+        let resolvedContent = content.resolvingSecurityScopedBookmarks()
+        guard lockScreenExporter.supportsExport(resolvedContent) else {
+            return
+        }
+
+        try await lockScreenExporter.export(content: resolvedContent)
     }
 
     private func enableDisplay(_ displayID: DisplayID) async {

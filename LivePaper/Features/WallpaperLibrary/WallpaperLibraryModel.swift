@@ -56,6 +56,11 @@ final class WallpaperLibraryModel {
         select(content: content, addToLibrary: false)
     }
 
+    func content(forGalleryItemID id: WallpaperGalleryItem.ID, savedConfigs: [DisplayID: SavedWallpaperConfig]) -> WallpaperContent? {
+        (library + savedConfigs.values.map(\.content))
+            .first { $0.galleryID == id }
+    }
+
     func deleteGalleryItem(id: WallpaperGalleryItem.ID, savedConfigs: inout [DisplayID: SavedWallpaperConfig]) {
         library.removeAll { $0.galleryID == id }
         savedConfigs = savedConfigs.filter { $0.value.content.galleryID != id }

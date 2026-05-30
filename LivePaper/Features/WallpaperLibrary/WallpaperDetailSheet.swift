@@ -6,6 +6,7 @@ struct WallpaperDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var presentedAlert: WallpaperDetailAlert?
     @State private var isDeleteHovered = false
+    @State private var isExportingLockScreen = false
     @State private var selectedDisplayIDs: Set<DisplayID> = []
     let item: WallpaperGalleryItem
 
@@ -106,6 +107,36 @@ struct WallpaperDetailSheet: View {
                     .disabled(selectedDisplayIDs.isEmpty)
                     .opacity(selectedDisplayIDs.isEmpty ? 0.55 : 1)
                     .focusable(false)
+
+                    if coordinator.canExportLockScreenWallpaper(galleryItemID: item.id) {
+                        Button {
+                            Task {
+                                isExportingLockScreen = true
+                                await coordinator.exportLockScreenWallpaper(galleryItemID: item.id)
+                                isExportingLockScreen = false
+                            }
+                        } label: {
+                            Image(systemName: isExportingLockScreen ? "hourglass" : "lock.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                        }
+                        .buttonStyle(.borderless)
+                        .background {
+                            Circle()
+                                .fill(Color.white.opacity(0.12))
+                                .background(.regularMaterial, in: Circle())
+                        }
+                        .overlay {
+                            Circle()
+                                .stroke(Color.white.opacity(0.16))
+                        }
+                        .disabled(isExportingLockScreen)
+                        .opacity(isExportingLockScreen ? 0.6 : 1)
+                        .contentShape(Circle())
+                        .focusable(false)
+                        .help("Export to Lock Screen")
+                    }
 
                     Button(role: .destructive) {
                         presentedAlert = .deleteConfirmation

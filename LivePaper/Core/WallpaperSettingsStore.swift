@@ -12,6 +12,7 @@ final class WallpaperSettingsStore {
         static let pauseOnBattery = "wallpaper.pauseOnBattery"
         static let pauseOnFullscreen = "wallpaper.pauseOnFullscreen"
         static let muteOnFullscreen = "wallpaper.muteOnFullscreen"
+        static let applyLockScreenAutomatically = "wallpaper.applyLockScreenAutomatically"
         static let steamCMDPath = "steam.steamCMDPath"
         static let steamCMDBookmark = "steam.steamCMDBookmark"
         static let steamCMDLoginMode = "steam.loginMode"
@@ -33,7 +34,8 @@ final class WallpaperSettingsStore {
             audioDisplayID: defaults.string(forKey: Keys.audioDisplayID).map(DisplayID.init(uuid:)),
             pauseOnBattery: defaults.object(forKey: Keys.pauseOnBattery) as? Bool ?? true,
             pauseOnFullscreen: defaults.object(forKey: Keys.pauseOnFullscreen) as? Bool ?? true,
-            muteOnFullscreen: defaults.object(forKey: Keys.muteOnFullscreen) as? Bool ?? false
+            muteOnFullscreen: defaults.object(forKey: Keys.muteOnFullscreen) as? Bool ?? false,
+            applyLockScreenAutomatically: defaults.object(forKey: Keys.applyLockScreenAutomatically) as? Bool ?? true
         )
     }
 
@@ -49,6 +51,7 @@ final class WallpaperSettingsStore {
         defaults.set(preferences.pauseOnBattery, forKey: Keys.pauseOnBattery)
         defaults.set(preferences.pauseOnFullscreen, forKey: Keys.pauseOnFullscreen)
         defaults.set(preferences.muteOnFullscreen, forKey: Keys.muteOnFullscreen)
+        defaults.set(preferences.applyLockScreenAutomatically, forKey: Keys.applyLockScreenAutomatically)
     }
 
     func shouldShowFirstLaunchIntro(hasExistingWallpapers: Bool) -> Bool {

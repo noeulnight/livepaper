@@ -106,6 +106,19 @@ struct SettingsTab: View {
                     }
                 }
 
+                GlassSection(title: "Lock Screen") {
+                    GlassSettingsRow(
+                        icon: "lock.fill",
+                        iconColor: .indigo,
+                        title: "Apply with Wallpaper",
+                        subtitle: "Export supported video wallpapers to the macOS Lock Screen when applied."
+                    ) {
+                        Toggle("", isOn: $coordinator.applyLockScreenAutomatically)
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                    }
+                }
+
                 GlassSection(title: "Startup") {
                     GlassSettingsRow(
                         icon: "power",
@@ -199,6 +212,9 @@ struct SettingsTab: View {
             saveRuntimeSettings()
         }
         .onChange(of: coordinator.muteOnFullscreen) { _, _ in
+            saveRuntimeSettings()
+        }
+        .onChange(of: coordinator.applyLockScreenAutomatically) { _, _ in
             saveRuntimeSettings()
         }
         .onAppear {

@@ -52,6 +52,26 @@ final class WallpaperSettingsStoreTests: XCTestCase {
         XCTAssertTrue(preferences.pauseOnBattery)
         XCTAssertTrue(preferences.pauseOnFullscreen)
         XCTAssertFalse(preferences.muteOnFullscreen)
+        XCTAssertTrue(preferences.applyLockScreenAutomatically)
+    }
+
+    func testRuntimePreferencesPersistLockScreenAutoApply() {
+        let store = WallpaperSettingsStore(defaults: defaults)
+
+        store.saveRuntimePreferences(
+            RuntimePreferences(
+                scaleMode: .fit,
+                muted: true,
+                volume: 0.2,
+                audioDisplayID: nil,
+                pauseOnBattery: false,
+                pauseOnFullscreen: false,
+                muteOnFullscreen: true,
+                applyLockScreenAutomatically: false
+            )
+        )
+
+        XCTAssertFalse(store.loadRuntimePreferences().applyLockScreenAutomatically)
     }
 
     func testFirstLaunchIntroDefaultsToVisibleForNewUsers() {
