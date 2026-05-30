@@ -67,7 +67,7 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
         XCTAssertEqual(restoredConfig, config)
     }
 
-    func testApplyRuntimeConfigsSkipsRuntimeUpdateForPausedDisplays() async throws {
+    func testApplyRuntimeConfigsUpdatesRuntimeBeforePausingPausedDisplays() async throws {
         let runtime = RecordingWallpaperRuntime()
         let controller = WallpaperRuntimeController(runtime: runtime)
         let displayID = DisplayID(uuid: "display-a")
@@ -87,7 +87,7 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
         XCTAssertEqual(controller.activeConfigs[displayID], config)
         XCTAssertEqual(controller.pausedDisplayIDs, [displayID])
         XCTAssertEqual(runtime.pauseCalls, [displayID])
-        XCTAssertTrue(runtime.updateCalls.isEmpty)
+        XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID])
     }
 
     func testApplyRuntimeConfigsUpdatesRuntimeAfterPausedDisplayBecomesActive() async throws {
@@ -115,7 +115,7 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
 
         XCTAssertTrue(controller.pausedDisplayIDs.isEmpty)
         XCTAssertEqual(runtime.pauseCalls, [displayID])
-        XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID])
+        XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID, displayID])
     }
 }
 

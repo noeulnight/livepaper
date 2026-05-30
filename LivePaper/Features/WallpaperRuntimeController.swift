@@ -55,6 +55,13 @@ final class WallpaperRuntimeController {
             }
 
             if pausedDisplayIDs.contains(displayID) {
+                try await runtime.update(
+                    config: Self.runtimeConfig(
+                        from: config,
+                        audioOwnerID: audioOwnerID,
+                        fullscreenDisplayIDs: fullscreenDisplayIDs
+                    )
+                )
                 await runtime.pause(displayID: displayID)
                 self.pausedDisplayIDs.insert(displayID)
                 continue
