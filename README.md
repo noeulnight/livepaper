@@ -20,6 +20,8 @@ LivePaper is a local-first macOS live wallpaper app. It runs from the menu bar, 
 - Per-display wallpaper assignment and restore.
 - Experimental Lock Screen export for video wallpapers through macOS Aerial wallpaper assets.
 - Video-only Screen Saver companion bundle.
+- Apply status indicators for Desktop, Lock Screen, and Screen Saver updates.
+- First-launch intro focused on adding the first wallpaper.
 - Playback controls for mute, volume, scale mode, pause on battery, pause on fullscreen, and mute on fullscreen.
 
 ## Supported Wallpaper Types
@@ -41,6 +43,17 @@ Not supported:
 - Screen Saver playback for web, scene, application, or package-only wallpapers.
 
 YouTube and other embedded media can be limited by autoplay, audio, and embed policy restrictions inside `WKWebView`. If a web wallpaper refuses to play reliably, use a local video file instead.
+
+## Apply Status
+
+The bottom control strip shows whether the current wallpaper has been applied to the desktop, exported to the Lock Screen, and written to the Screen Saver configuration. Each surface reports one of these states:
+
+- Applying: LivePaper is updating that surface.
+- Applied: the surface was updated or restored successfully.
+- Skipped: the surface is not eligible or automatic export is disabled.
+- Failed: LivePaper could not verify or complete the update.
+
+Status is refreshed when the main window appears and when the app becomes active, so it can reflect external macOS wallpaper store changes after returning to LivePaper.
 
 ## Lock Screen Export
 
