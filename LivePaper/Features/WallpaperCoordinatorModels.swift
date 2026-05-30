@@ -42,6 +42,54 @@ struct WallpaperGalleryItem: Identifiable, Hashable, Sendable {
     }
 }
 
+enum WallpaperApplySurfaceState: Equatable, Sendable {
+    case idle
+    case applying
+    case applied
+    case skipped
+    case failed
+}
+
+enum ApplyProgressDuration: Sendable {
+    case primary
+    case secondary
+    case verification
+
+    var nanoseconds: UInt64 {
+        switch self {
+        case .primary:
+            return 150_000_000
+        case .secondary:
+            return 100_000_000
+        case .verification:
+            return 250_000_000
+        }
+    }
+}
+
+struct WallpaperApplySurfaceStatus: Equatable, Sendable {
+    var state: WallpaperApplySurfaceState
+    var detail: String
+
+    static let idle = WallpaperApplySurfaceStatus(state: .idle, detail: "Ready")
+}
+
+struct WallpaperApplyStatus: Equatable, Sendable {
+    var contentName: String
+    var displayCount: Int
+    var desktop: WallpaperApplySurfaceStatus
+    var lockScreen: WallpaperApplySurfaceStatus
+    var screenSaver: WallpaperApplySurfaceStatus
+
+    static let idle = WallpaperApplyStatus(
+        contentName: "No wallpaper applied",
+        displayCount: 0,
+        desktop: .idle,
+        lockScreen: .idle,
+        screenSaver: .idle
+    )
+}
+
 extension WallpaperContent {
     var galleryID: String {
         "\(kind.rawValue):\(url.absoluteString)"

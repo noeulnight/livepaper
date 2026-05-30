@@ -14,5 +14,5 @@ enum DisplayCardMetrics {
 
 enum LivePaperBottomTabMetrics {
     static let bottomPadding: CGFloat = 16
-    static let scrollContentTailPadding: CGFloat = 84
+    static let scrollContentTailPadding: CGFloat = 92
 }

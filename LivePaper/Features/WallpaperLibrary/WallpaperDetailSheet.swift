@@ -89,11 +89,10 @@ struct WallpaperDetailSheet: View {
 
                 HStack(spacing: 12) {
                     Button {
+                        let targetDisplayIDs = selectedDisplayIDs
+                        dismiss()
                         Task {
-                            await coordinator.applySelectedContent(to: selectedDisplayIDs)
-                            if coordinator.lastError == nil {
-                                dismiss()
-                            }
+                            await coordinator.applySelectedContent(to: targetDisplayIDs)
                         }
                     } label: {
                         Text("Apply This Wallpaper")
@@ -112,7 +111,10 @@ struct WallpaperDetailSheet: View {
                         Button {
                             Task {
                                 isExportingLockScreen = true
-                                await coordinator.exportLockScreenWallpaper(galleryItemID: item.id)
+                                await coordinator.exportLockScreenWallpaper(
+                                    galleryItemID: item.id,
+                                    targetDisplayIDs: selectedDisplayIDs
+                                )
                                 isExportingLockScreen = false
                             }
                         } label: {

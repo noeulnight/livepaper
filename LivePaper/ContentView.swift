@@ -25,7 +25,12 @@ struct ContentView: View {
                 .padding(.top, 34)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            LivePaperBottomTabBar(selectedTab: $selectedNavigationTab)
+            HStack(spacing: 12) {
+                Spacer(minLength: 0)
+                LivePaperBottomTabBar(selectedTab: $selectedNavigationTab)
+                LivePaperApplyStatusView(status: coordinator.applyStatus)
+                Spacer(minLength: 0)
+            }
                 .padding(.horizontal, 24)
                 .padding(.bottom, LivePaperBottomTabMetrics.bottomPadding)
                 .zIndex(1)
@@ -33,6 +38,12 @@ struct ContentView: View {
         .frame(minWidth: 920, minHeight: 620)
         .preferredColorScheme(.dark)
         .focusEffectDisabled()
+        .onAppear {
+            coordinator.refreshApplyStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            coordinator.refreshApplyStatus()
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             Task {
                 await coordinator.shutdown()

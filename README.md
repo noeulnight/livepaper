@@ -44,7 +44,7 @@ YouTube and other embedded media can be limited by autoplay, audio, and embed po
 
 ## Lock Screen Export
 
-LivePaper can export supported video wallpapers to the macOS Lock Screen. When `Settings > Lock Screen > Apply with Wallpaper` is enabled, pressing `Apply This Wallpaper` also exports the same video to macOS's Aerial wallpaper asset store. The wallpaper detail view also has a lock button for manually exporting a supported video.
+LivePaper can export supported video wallpapers to the macOS Lock Screen. When `Settings > Lock Screen > Apply with Wallpaper` is enabled, pressing `Apply This Wallpaper` also exports the same video to macOS's Aerial wallpaper asset store for each selected display. The wallpaper detail view also has a lock button for manually exporting a supported video to the selected displays.
 
 Only video-backed wallpapers are eligible for automatic Lock Screen export. Web wallpapers can still run on the desktop inside LivePaper, but they are not converted into Lock Screen assets.
 

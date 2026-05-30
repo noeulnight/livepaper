@@ -31,6 +31,7 @@ final class WallpaperCoordinator {
     private(set) var loginItemStatus: LoginItemStatus
     private(set) var shouldShowFirstLaunchIntro = false
     private(set) var isScreenSaverInstalled = false
+    private(set) var applyStatus = WallpaperApplyStatus.idle
 
     var selectedDisplayIDs: Set<DisplayID> = [] {
         didSet {
@@ -208,6 +209,10 @@ final class WallpaperCoordinator {
         lastError = nil
     }
 
+    func refreshApplyStatus() {
+        syncApplyStatusFromActiveConfigs()
+    }
+
     func syncSteamMetadata() {
         libraryModel.syncSteamMetadataFromLocalFiles(savedConfigs: &savedConfigs)
         syncLibraryState()
@@ -242,18 +247,53 @@ final class WallpaperCoordinator {
         return lockScreenExporter.supportsExport(content)
     }
 
-    func exportLockScreenWallpaper(galleryItemID: WallpaperGalleryItem.ID) async {
+    func exportLockScreenWallpaper(
+        galleryItemID: WallpaperGalleryItem.ID,
+        targetDisplayIDs: Set<DisplayID>
+    ) async {
         guard let content = libraryModel.content(forGalleryItemID: galleryItemID, savedConfigs: savedConfigs) else {
             lastError = "Choose a wallpaper first."
             return
         }
 
+        refreshDisplays()
+        let availableDisplayIDs = Set(displays.map(\.id))
+        let targetIDs = targetDisplayIDs.intersection(availableDisplayIDs)
+        guard !targetIDs.isEmpty else {
+            lastError = "Choose at least one display."
+            return
+        }
+
         do {
             let resolvedContent = content.resolvingSecurityScopedBookmarks()
+            updateApplyStatus(
+                content: resolvedContent,
+                displayCount: targetIDs.count,
+                desktop: nil,
+                lockScreen: .init(state: .applying, detail: "Exporting"),
+                screenSaver: screenSaverConfigurationStore.supports(resolvedContent)
+                    ? .init(state: .applying, detail: "Updating")
+                    : .init(state: .skipped, detail: "Video only")
+            )
+            await showApplyProgressFrame(duration: .primary)
             try screenSaverConfigurationStore.save(content: resolvedContent)
-            try await lockScreenExporter.export(content: resolvedContent)
+            try await lockScreenExporter.export(
+                content: resolvedContent,
+                displayIDs: lockScreenSelectionDisplayIDs(
+                    for: displaySelection.orderedDisplayIDs(from: targetIDs)
+                )
+            )
+            await showApplyProgressFrame(duration: .verification)
+            updateApplyStatus(
+                content: resolvedContent,
+                displayCount: targetIDs.count,
+                desktop: nil,
+                lockScreen: await settledVerifiedLockScreenStatus(for: resolvedContent, displayIDs: targetIDs),
+                screenSaver: .init(state: .applied, detail: "Updated")
+            )
             lastError = nil
         } catch {
+            markApplyStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
@@ -297,6 +337,14 @@ final class WallpaperCoordinator {
 
             var updatedConfigs = activeConfigs
             let orderedTargetIDs = displaySelection.orderedDisplayIDs(from: targetIDs)
+            updateApplyStatus(
+                content: content,
+                displayCount: orderedTargetIDs.count,
+                desktop: .init(state: .applying, detail: "Applying"),
+                lockScreen: lockScreenStatusBeforeExport(for: content),
+                screenSaver: screenSaverStatusBeforeExport(for: content)
+            )
+            await showApplyProgressFrame(duration: .primary)
 
             for displayID in orderedTargetIDs {
                 let config = desiredConfig(displayID: displayID, content: content)
@@ -309,9 +357,26 @@ final class WallpaperCoordinator {
             store.save(configs: savedConfigs)
             syncLibraryState()
             await refreshRuntimePolicy()
-            try await exportLockScreenWallpaperIfNeeded(for: content)
+            updateApplyStatus(
+                content: content,
+                displayCount: orderedTargetIDs.count,
+                desktop: .init(state: .applied, detail: "Applied"),
+                lockScreen: lockScreenStatusBeforeExport(for: content),
+                screenSaver: screenSaverStatusBeforeExport(for: content)
+            )
+            await showApplyProgressFrame(duration: .secondary)
+            try await exportLockScreenWallpaperIfNeeded(for: content, displayIDs: orderedTargetIDs)
+            await showApplyProgressFrame(duration: .verification)
+            updateApplyStatus(
+                content: content,
+                displayCount: orderedTargetIDs.count,
+                desktop: .init(state: .applied, detail: "Applied"),
+                lockScreen: await settledVerifiedLockScreenStatus(for: content, displayIDs: orderedTargetIDs),
+                screenSaver: screenSaverStatusAfterExport(for: content)
+            )
             lastError = nil
         } catch {
+            markApplyStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
@@ -339,8 +404,11 @@ final class WallpaperCoordinator {
 
             try await applyRuntimeConfigs(updatedConfigs)
             await refreshRuntimePolicy()
+            try await syncLockScreenWallpapersIfNeeded(for: targetConfigs)
+            syncApplyStatusFromActiveConfigs()
             lastError = nil
         } catch {
+            markApplyStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
@@ -523,6 +591,137 @@ final class WallpaperCoordinator {
         steamDownloadLog = steamController.steamDownloadLog
     }
 
+    private func updateApplyStatus(
+        content: WallpaperContent,
+        displayCount: Int,
+        desktop: WallpaperApplySurfaceStatus?,
+        lockScreen: WallpaperApplySurfaceStatus?,
+        screenSaver: WallpaperApplySurfaceStatus?
+    ) {
+        applyStatus = WallpaperApplyStatus(
+            contentName: content.displayName,
+            displayCount: displayCount,
+            desktop: desktop ?? applyStatus.desktop,
+            lockScreen: lockScreen ?? applyStatus.lockScreen,
+            screenSaver: screenSaver ?? applyStatus.screenSaver
+        )
+    }
+
+    private func showApplyProgressFrame(duration: ApplyProgressDuration) async {
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: duration.nanoseconds)
+    }
+
+    private func markApplyStatusFailed(detail: String) {
+        applyStatus.desktop = failIfApplying(applyStatus.desktop, detail: detail)
+        applyStatus.lockScreen = failIfApplying(applyStatus.lockScreen, detail: detail)
+        applyStatus.screenSaver = failIfApplying(applyStatus.screenSaver, detail: detail)
+    }
+
+    private func failIfApplying(
+        _ status: WallpaperApplySurfaceStatus,
+        detail: String
+    ) -> WallpaperApplySurfaceStatus {
+        status.state == .applying ? .init(state: .failed, detail: detail) : status
+    }
+
+    private func lockScreenStatusBeforeExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
+        guard applyLockScreenAutomatically else {
+            return .init(state: .skipped, detail: "Auto off")
+        }
+
+        guard lockScreenExporter.supportsExport(content.resolvingSecurityScopedBookmarks()) else {
+            return .init(state: .skipped, detail: "Video only")
+        }
+
+        return .init(state: .applying, detail: "Exporting")
+    }
+
+    private func lockScreenStatusAfterExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
+        guard applyLockScreenAutomatically else {
+            return .init(state: .skipped, detail: "Auto off")
+        }
+
+        guard lockScreenExporter.supportsExport(content.resolvingSecurityScopedBookmarks()) else {
+            return .init(state: .skipped, detail: "Video only")
+        }
+
+        return .init(state: .applied, detail: "Exported")
+    }
+
+    private func verifiedLockScreenStatus(
+        for content: WallpaperContent,
+        displayIDs: some Collection<DisplayID>
+    ) -> WallpaperApplySurfaceStatus {
+        guard applyLockScreenAutomatically else {
+            return .init(state: .skipped, detail: "Auto off")
+        }
+
+        let resolvedContent = content.resolvingSecurityScopedBookmarks()
+        guard lockScreenExporter.supportsExport(resolvedContent) else {
+            return .init(state: .skipped, detail: "Video only")
+        }
+
+        let orderedDisplayIDs = displaySelection.orderedDisplayIDs(from: Set(displayIDs))
+        guard lockScreenExporter.isExportSelected(content: resolvedContent, displayIDs: orderedDisplayIDs) else {
+            return .init(state: .failed, detail: "Not selected")
+        }
+
+        return .init(state: .applied, detail: "Exported")
+    }
+
+    private func settledVerifiedLockScreenStatus(
+        for content: WallpaperContent,
+        displayIDs: some Collection<DisplayID>
+    ) async -> WallpaperApplySurfaceStatus {
+        let firstStatus = verifiedLockScreenStatus(for: content, displayIDs: displayIDs)
+        guard firstStatus.state == .failed else {
+            return firstStatus
+        }
+
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        return verifiedLockScreenStatus(for: content, displayIDs: displayIDs)
+    }
+
+    private func screenSaverStatusBeforeExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
+        screenSaverConfigurationStore.supports(content.resolvingSecurityScopedBookmarks())
+            ? .init(state: .applying, detail: "Updating")
+            : .init(state: .skipped, detail: "Video only")
+    }
+
+    private func screenSaverStatusAfterExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
+        screenSaverConfigurationStore.supports(content.resolvingSecurityScopedBookmarks())
+            ? .init(state: .applied, detail: "Updated")
+            : .init(state: .skipped, detail: "Video only")
+    }
+
+    private func syncApplyStatusFromActiveConfigs() {
+        let availableDisplayIDs = Set(displays.map(\.id))
+        let configs = Array(activeConfigs.values)
+        let fallbackConfigs = savedConfigs
+            .filter { availableDisplayIDs.contains($0.key) }
+            .map { WallpaperRuntimeController.desiredConfig(from: $0.value) }
+        let visibleConfigs = configs.isEmpty ? fallbackConfigs : configs
+        guard let firstConfig = visibleConfigs.first else {
+            applyStatus = .idle
+            return
+        }
+
+        let matchingConfigs = visibleConfigs.filter {
+            $0.content.galleryID == firstConfig.content.galleryID
+        }
+        applyStatus = WallpaperApplyStatus(
+            contentName: firstConfig.content.displayName,
+            displayCount: matchingConfigs.count,
+            desktop: .init(state: .applied, detail: "Restored"),
+            lockScreen: verifiedLockScreenStatus(
+                for: firstConfig.content,
+                displayIDs: matchingConfigs.map(\.displayID)
+            ),
+            screenSaver: screenSaverStatusAfterExport(for: firstConfig.content)
+        )
+    }
+
     private func saveRuntimePreferences() {
         store.saveRuntimePreferences(
             RuntimePreferences(
@@ -538,7 +737,10 @@ final class WallpaperCoordinator {
         )
     }
 
-    private func exportLockScreenWallpaperIfNeeded(for content: WallpaperContent) async throws {
+    private func exportLockScreenWallpaperIfNeeded(
+        for content: WallpaperContent,
+        displayIDs: [DisplayID]
+    ) async throws {
         let resolvedContent = content.resolvingSecurityScopedBookmarks()
         if screenSaverConfigurationStore.supports(resolvedContent) {
             try screenSaverConfigurationStore.save(content: resolvedContent)
@@ -552,7 +754,109 @@ final class WallpaperCoordinator {
             return
         }
 
-        try await lockScreenExporter.export(content: resolvedContent)
+        try await lockScreenExporter.export(
+            content: resolvedContent,
+            displayIDs: lockScreenSelectionDisplayIDs(for: displayIDs)
+        )
+    }
+
+    private func syncLockScreenWallpapersIfNeeded(
+        for savedConfigs: [DisplayID: SavedWallpaperConfig]
+    ) async throws {
+        guard applyLockScreenAutomatically else {
+            return
+        }
+
+        let orderedDisplayIDs = displaySelection.orderedDisplayIDs(from: Set(savedConfigs.keys))
+        var exportItems: [(displayID: DisplayID, content: WallpaperContent)] = []
+        for displayID in orderedDisplayIDs {
+            guard let config = savedConfigs[displayID] else {
+                continue
+            }
+
+            let resolvedContent = config.content.resolvingSecurityScopedBookmarks()
+            if screenSaverConfigurationStore.supports(resolvedContent) {
+                try screenSaverConfigurationStore.save(content: resolvedContent)
+            }
+
+            guard lockScreenExporter.supportsExport(resolvedContent) else {
+                continue
+            }
+
+            exportItems.append((displayID: displayID, content: resolvedContent))
+        }
+
+        guard !exportItems.isEmpty else {
+            return
+        }
+
+        let exportDisplayIDs = exportItems.map(\.displayID)
+        guard !lockScreenSelectionsMatch(savedConfigs, displayIDs: exportDisplayIDs) else {
+            return
+        }
+
+        try await exportLockScreenItems(exportItems)
+        await showApplyProgressFrame(duration: .verification)
+
+        guard lockScreenSelectionsMatch(savedConfigs, displayIDs: exportDisplayIDs) else {
+            try await exportLockScreenItems(exportItems)
+            await showApplyProgressFrame(duration: .verification)
+            guard lockScreenSelectionsMatch(savedConfigs, displayIDs: exportDisplayIDs) else {
+                throw AerialLockScreenExportError.invalidWallpaperIndex(
+                    FileManager.default.homeDirectoryForCurrentUser
+                        .appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
+                )
+            }
+            return
+        }
+    }
+
+    private func lockScreenSelectionsMatch(
+        _ savedConfigs: [DisplayID: SavedWallpaperConfig],
+        displayIDs: [DisplayID]
+    ) -> Bool {
+        for displayID in displayIDs {
+            guard let config = savedConfigs[displayID] else {
+                continue
+            }
+
+            let resolvedContent = config.content.resolvingSecurityScopedBookmarks()
+            guard lockScreenExporter.supportsExport(resolvedContent) else {
+                continue
+            }
+
+            guard lockScreenExporter.isExportSelected(content: resolvedContent, displayIDs: [displayID]) else {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private func exportLockScreenItems(
+        _ exportItems: [(displayID: DisplayID, content: WallpaperContent)]
+    ) async throws {
+        guard let firstItem = exportItems.first else {
+            return
+        }
+
+        let displayIDs = exportItems.map(\.displayID)
+        if shouldUseGlobalLockScreenSelection(for: displayIDs),
+           exportItems.allSatisfy({ $0.content.galleryID == firstItem.content.galleryID }) {
+            try await lockScreenExporter.export(content: firstItem.content, displayIDs: [])
+            return
+        }
+
+        try await lockScreenExporter.export(contentsByDisplayID: exportItems)
+    }
+
+    private func lockScreenSelectionDisplayIDs(for displayIDs: [DisplayID]) -> [DisplayID] {
+        shouldUseGlobalLockScreenSelection(for: displayIDs) ? [] : displayIDs
+    }
+
+    private func shouldUseGlobalLockScreenSelection(for displayIDs: [DisplayID]) -> Bool {
+        let availableDisplayIDs = Set(displays.map(\.id))
+        return !availableDisplayIDs.isEmpty && Set(displayIDs) == availableDisplayIDs
     }
 
     private func enableDisplay(_ displayID: DisplayID) async {
@@ -726,7 +1030,11 @@ final class WallpaperCoordinator {
 
         do {
             try await applyRuntimeConfigs(updatedConfigs)
+            let restoredConfigs = savedConfigs.filter { restoreDisplayIDs.contains($0.key) }
+            try await syncLockScreenWallpapersIfNeeded(for: restoredConfigs)
+            syncApplyStatusFromActiveConfigs()
         } catch {
+            markApplyStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
