@@ -12,6 +12,8 @@ final class WallpaperCoordinator {
     private let steamController: SteamWorkshopController
     private let loginItemController: LoginItemController
     private let lockScreenExporter: AerialLockScreenExporter
+    private let screenSaverConfigurationStore: ScreenSaverConfigurationStore
+    private let screenSaverInstaller: ScreenSaverInstaller
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
@@ -28,6 +30,7 @@ final class WallpaperCoordinator {
     private(set) var galleryItems: [WallpaperGalleryItem] = []
     private(set) var loginItemStatus: LoginItemStatus
     private(set) var shouldShowFirstLaunchIntro = false
+    private(set) var isScreenSaverInstalled = false
 
     var selectedDisplayIDs: Set<DisplayID> = [] {
         didSet {
@@ -81,6 +84,8 @@ final class WallpaperCoordinator {
         self.steamController = SteamWorkshopController(store: resolvedStore)
         self.loginItemController = resolvedLoginItemController
         self.lockScreenExporter = AerialLockScreenExporter()
+        self.screenSaverConfigurationStore = ScreenSaverConfigurationStore()
+        self.screenSaverInstaller = ScreenSaverInstaller()
         self.loginItemStatus = resolvedLoginItemController.status()
 
         scaleMode = loadedPreferences.scaleMode
@@ -244,11 +249,27 @@ final class WallpaperCoordinator {
         }
 
         do {
-            try await lockScreenExporter.export(content: content.resolvingSecurityScopedBookmarks())
+            let resolvedContent = content.resolvingSecurityScopedBookmarks()
+            try screenSaverConfigurationStore.save(content: resolvedContent)
+            try await lockScreenExporter.export(content: resolvedContent)
             lastError = nil
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    func installScreenSaver() {
+        do {
+            try screenSaverInstaller.install()
+            isScreenSaverInstalled = true
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func openScreenSaverSettings() {
+        screenSaverInstaller.openScreenSaverSettings()
     }
 
     func applySelectedContent() async {
@@ -518,11 +539,15 @@ final class WallpaperCoordinator {
     }
 
     private func exportLockScreenWallpaperIfNeeded(for content: WallpaperContent) async throws {
+        let resolvedContent = content.resolvingSecurityScopedBookmarks()
+        if screenSaverConfigurationStore.supports(resolvedContent) {
+            try screenSaverConfigurationStore.save(content: resolvedContent)
+        }
+
         guard applyLockScreenAutomatically else {
             return
         }
 
-        let resolvedContent = content.resolvingSecurityScopedBookmarks()
         guard lockScreenExporter.supportsExport(resolvedContent) else {
             return
         }

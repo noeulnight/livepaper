@@ -18,6 +18,8 @@ LivePaper is a local-first macOS live wallpaper app. It runs from the menu bar, 
 - Web wallpaper support, including normalized YouTube embed URLs where possible.
 - Steam Workshop import path for supported Wallpaper Engine web/video wallpapers.
 - Per-display wallpaper assignment and restore.
+- Experimental Lock Screen export for video wallpapers through macOS Aerial wallpaper assets.
+- Video-only Screen Saver companion bundle.
 - Playback controls for mute, volume, scale mode, pause on battery, pause on fullscreen, and mute on fullscreen.
 
 ## Supported Wallpaper Types
@@ -27,15 +29,44 @@ LivePaper currently supports:
 - Local video files.
 - Web pages rendered through `WKWebView`.
 - Wallpaper Engine Workshop items that resolve to web wallpapers or video files.
+- Lock Screen export for local video wallpapers and Wallpaper Engine Workshop video wallpapers.
+- Screen Saver playback for local video wallpapers and Wallpaper Engine Workshop video wallpapers.
 
 Not supported:
 
 - Wallpaper Engine scene wallpapers.
 - Wallpaper Engine application wallpapers.
 - Package-only Workshop items without a directly importable web or video entry point.
-- Lock Screen or Screen Saver integration.
+- Lock Screen export for web, scene, application, or package-only wallpapers.
+- Screen Saver playback for web, scene, application, or package-only wallpapers.
 
 YouTube and other embedded media can be limited by autoplay, audio, and embed policy restrictions inside `WKWebView`. If a web wallpaper refuses to play reliably, use a local video file instead.
+
+## Lock Screen Export
+
+LivePaper can export supported video wallpapers to the macOS Lock Screen. When `Settings > Lock Screen > Apply with Wallpaper` is enabled, pressing `Apply This Wallpaper` also exports the same video to macOS's Aerial wallpaper asset store. The wallpaper detail view also has a lock button for manually exporting a supported video.
+
+This feature supports:
+
+- Local video wallpapers.
+- Steam Workshop wallpapers imported as Wallpaper Engine `video` items.
+
+This feature does not support web wallpapers, YouTube wallpapers, scene wallpapers, application wallpapers, or package-only Workshop items.
+
+The implementation patches the user-level macOS Aerial wallpaper manifest under `~/Library/Application Support/com.apple.wallpaper/aerials` and updates the wallpaper store selection. This is not a public Apple API surface, so it should be treated as experimental and may break after macOS updates.
+
+## Screen Saver
+
+LivePaper includes a video-only `.saver` companion bundle. The app stores the latest supported video wallpaper in `~/Library/Application Support/LivePaper/ScreenSaverConfig.json`, and the screen saver reads that file to play the same video with `AVPlayerLayer`.
+
+To use it:
+
+1. Apply a local video wallpaper or a Steam Workshop wallpaper imported as a Wallpaper Engine `video` item.
+2. Open `Settings > Lock Screen`.
+3. Click `Install` in the `Screen Saver` row.
+4. Open macOS Screen Saver settings and select `LivePaper Screen Saver`.
+
+The screen saver intentionally does not support web wallpapers, YouTube wallpapers, scene wallpapers, application wallpapers, or package-only Workshop items.
 
 ## Requirements
 

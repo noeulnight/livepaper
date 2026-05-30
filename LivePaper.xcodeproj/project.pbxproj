@@ -14,11 +14,42 @@
 			remoteGlobalIDString = 0FBF0BA42FC90AE700A79E58;
 			remoteInfo = LivePaper;
 		};
+		2B0000000000000000000011 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0FBF0B9D2FC90AE700A79E58 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2B0000000000000000000004;
+			remoteInfo = LivePaperScreenSaver;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXBuildFile section */
+		2B0000000000000000000001 /* LivePaperScreenSaverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000002 /* LivePaperScreenSaverView.swift */; };
+		2B0000000000000000000003 /* ScreenSaver.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000005 /* ScreenSaver.framework */; };
+		2B0000000000000000000006 /* LivePaperScreenSaver.saver in PlugIns */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000007 /* LivePaperScreenSaver.saver */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2B0000000000000000000008 /* Embed Screen Saver */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2B0000000000000000000006 /* LivePaperScreenSaver.saver in PlugIns */,
+			);
+			name = "Embed Screen Saver";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0FBF0BA52FC90AE700A79E58 /* LivePaper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LivePaper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A2B3C4D5E6F708192A0B1C2 /* LivePaperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LivePaperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2B0000000000000000000002 /* LivePaperScreenSaverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePaperScreenSaverView.swift; sourceTree = "<group>"; };
+		2B0000000000000000000005 /* ScreenSaver.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenSaver.framework; path = System/Library/Frameworks/ScreenSaver.framework; sourceTree = SDKROOT; };
+		2B0000000000000000000007 /* LivePaperScreenSaver.saver */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LivePaperScreenSaver.saver; sourceTree = BUILT_PRODUCTS_DIR; };
+		2B0000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +80,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2B000000000000000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B0000000000000000000003 /* ScreenSaver.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -56,7 +95,9 @@
 			isa = PBXGroup;
 			children = (
 				0FBF0BA72FC90AE700A79E58 /* LivePaper */,
+				2B000000000000000000000B /* LivePaperScreenSaver */,
 				1A2B3C4D5E6F708192A0B1C3 /* LivePaperTests */,
+				2B000000000000000000000C /* Frameworks */,
 				0FBF0BA62FC90AE700A79E58 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -65,9 +106,27 @@
 			isa = PBXGroup;
 			children = (
 				0FBF0BA52FC90AE700A79E58 /* LivePaper.app */,
+				2B0000000000000000000007 /* LivePaperScreenSaver.saver */,
 				1A2B3C4D5E6F708192A0B1C2 /* LivePaperTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		2B000000000000000000000B /* LivePaperScreenSaver */ = {
+			isa = PBXGroup;
+			children = (
+				2B0000000000000000000002 /* LivePaperScreenSaverView.swift */,
+				2B0000000000000000000009 /* Info.plist */,
+			);
+			path = LivePaperScreenSaver;
+			sourceTree = "<group>";
+		};
+		2B000000000000000000000C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				2B0000000000000000000005 /* ScreenSaver.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -80,10 +139,12 @@
 				0FBF0BA12FC90AE700A79E58 /* Sources */,
 				0FBF0BA22FC90AE700A79E58 /* Frameworks */,
 				0FBF0BA32FC90AE700A79E58 /* Resources */,
+				2B0000000000000000000008 /* Embed Screen Saver */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				2B0000000000000000000010 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				0FBF0BA72FC90AE700A79E58 /* LivePaper */,
@@ -94,6 +155,25 @@
 			productName = LivePaper;
 			productReference = 0FBF0BA52FC90AE700A79E58 /* LivePaper.app */;
 			productType = "com.apple.product-type.application";
+		};
+		2B0000000000000000000004 /* LivePaperScreenSaver */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2B000000000000000000000D /* Build configuration list for PBXNativeTarget "LivePaperScreenSaver" */;
+			buildPhases = (
+				2B000000000000000000000E /* Sources */,
+				2B000000000000000000000A /* Frameworks */,
+				2B000000000000000000000F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LivePaperScreenSaver;
+			packageProductDependencies = (
+			);
+			productName = LivePaperScreenSaver;
+			productReference = 2B0000000000000000000007 /* LivePaperScreenSaver.saver */;
+			productType = "com.apple.product-type.bundle";
 		};
 		1A2B3C4D5E6F708192A0B1C5 /* LivePaperTests */ = {
 			isa = PBXNativeTarget;
@@ -135,6 +215,9 @@
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 0FBF0BA42FC90AE700A79E58;
 					};
+					2B0000000000000000000004 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = 0FBF0BA02FC90AE700A79E58 /* Build configuration list for PBXProject "LivePaper" */;
@@ -152,6 +235,7 @@
 			projectRoot = "";
 			targets = (
 				0FBF0BA42FC90AE700A79E58 /* LivePaper */,
+				2B0000000000000000000004 /* LivePaperScreenSaver */,
 				1A2B3C4D5E6F708192A0B1C5 /* LivePaperTests */,
 			);
 		};
@@ -166,6 +250,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1A2B3C4D5E6F708192A0B1C8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2B000000000000000000000F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -189,6 +280,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2B000000000000000000000E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B0000000000000000000001 /* LivePaperScreenSaverView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -196,6 +295,11 @@
 			isa = PBXTargetDependency;
 			target = 0FBF0BA42FC90AE700A79E58 /* LivePaper */;
 			targetProxy = 1A2B3C4D5E6F708192A0B1CA /* PBXContainerItemProxy */;
+		};
+		2B0000000000000000000010 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2B0000000000000000000004 /* LivePaperScreenSaver */;
+			targetProxy = 2B0000000000000000000011 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -440,6 +544,66 @@
 			};
 			name = Release;
 		};
+		2B0000000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2B782JJGJ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LivePaperScreenSaver/Info.plist;
+				INSTALL_PATH = "$(HOME)/Library/Screen Savers";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = so.lth.LivePaper.ScreenSaver;
+				PRODUCT_NAME = LivePaperScreenSaver;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = saver;
+			};
+			name = Debug;
+		};
+		2B0000000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2B782JJGJ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LivePaperScreenSaver/Info.plist;
+				INSTALL_PATH = "$(HOME)/Library/Screen Savers";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = so.lth.LivePaper.ScreenSaver;
+				PRODUCT_NAME = LivePaperScreenSaver;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				WRAPPER_EXTENSION = saver;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -466,6 +630,15 @@
 			buildConfigurations = (
 				1A2B3C4D5E6F708192A0B1CB /* Debug */,
 				1A2B3C4D5E6F708192A0B1CC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2B000000000000000000000D /* Build configuration list for PBXNativeTarget "LivePaperScreenSaver" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2B0000000000000000000012 /* Debug */,
+				2B0000000000000000000013 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -107,15 +107,40 @@ struct SettingsTab: View {
                 }
 
                 GlassSection(title: "Lock Screen") {
-                    GlassSettingsRow(
-                        icon: "lock.fill",
-                        iconColor: .indigo,
-                        title: "Apply with Wallpaper",
-                        subtitle: "Export supported video wallpapers to the macOS Lock Screen when applied."
-                    ) {
-                        Toggle("", isOn: $coordinator.applyLockScreenAutomatically)
-                            .labelsHidden()
-                            .toggleStyle(.switch)
+                    VStack(spacing: 0) {
+                        GlassSettingsRow(
+                            icon: "lock.fill",
+                            iconColor: .indigo,
+                            title: "Apply with Wallpaper",
+                            subtitle: "Export supported video wallpapers to the macOS Lock Screen when applied."
+                        ) {
+                            Toggle("", isOn: $coordinator.applyLockScreenAutomatically)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+
+                        GlassDivider()
+
+                        GlassSettingsRow(
+                            icon: "rectangle.on.rectangle",
+                            iconColor: .cyan,
+                            title: "Screen Saver",
+                            subtitle: "Install the video-only LivePaper screen saver bundle."
+                        ) {
+                            HStack(spacing: 8) {
+                                Button("Install") {
+                                    coordinator.installScreenSaver()
+                                }
+                                .buttonStyle(GlassSecondaryButtonStyle())
+                                .focusable(false)
+
+                                Button("Open Settings") {
+                                    coordinator.openScreenSaverSettings()
+                                }
+                                .buttonStyle(GlassSecondaryButtonStyle())
+                                .focusable(false)
+                            }
+                        }
                     }
                 }
 
