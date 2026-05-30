@@ -158,6 +158,7 @@ final class RecordingWallpaperRuntime: WallpaperRuntime {
     private(set) var matchingWallpaperAudioLeaderCalls: [DisplayID?] = []
     private(set) var synchronizeMatchingWallpapersCalls: [Bool] = []
     private(set) var runtimeOptionEvents: [String] = []
+    private(set) var events: [String] = []
 
     func setMatchingWallpaperAudioLeader(_ displayID: DisplayID?) async {
         matchingWallpaperAudioLeaderCalls.append(displayID)
@@ -171,20 +172,24 @@ final class RecordingWallpaperRuntime: WallpaperRuntime {
 
     func start(config: WallpaperConfig) async throws {
         updateCalls.append(config)
+        events.append("update:\(config.content.url.absoluteString)")
     }
 
     func stop(displayID: DisplayID) async {
         stopCalls.append(displayID)
+        events.append("stop:\(displayID.uuid)")
     }
 
     func stopAll() async {}
 
     func update(config: WallpaperConfig) async throws {
         updateCalls.append(config)
+        events.append("update:\(config.content.url.absoluteString)")
     }
 
     func pause(displayID: DisplayID) async {
         pauseCalls.append(displayID)
+        events.append("pause:\(displayID.uuid)")
     }
 
     func resume(displayID: DisplayID) async {}

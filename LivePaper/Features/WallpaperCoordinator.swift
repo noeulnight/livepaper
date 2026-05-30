@@ -13,13 +13,12 @@ final class WallpaperCoordinator {
     private let policyController: RuntimePolicyController
     private let steamController: SteamWorkshopController
     private let loginItemController: LoginItemController
-    private let lockScreenExporter: AerialLockScreenExporter
-    private let screenSaverConfigurationStore: ScreenSaverConfigurationStore
-    private let screenSaverInstaller: ScreenSaverInstaller
+    private let applyCoordinator: WallpaperApplyCoordinator
     private let nowPlayingProviderFactory: @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
+    private var manuallyPausedDisplayIDs: Set<DisplayID> = []
     private var preMusicSyncConfigs: [DisplayID: WallpaperConfig]?
     private var musicSyncPlaybackMonitorTask: Task<Void, Never>?
     private var isMusicSyncRuntimeApplied = false
@@ -97,11 +96,12 @@ final class WallpaperCoordinator {
         self.policyController = RuntimePolicyController()
         self.steamController = SteamWorkshopController(store: resolvedStore)
         self.loginItemController = resolvedLoginItemController
-        self.lockScreenExporter = AerialLockScreenExporter()
-        self.screenSaverConfigurationStore = ScreenSaverConfigurationStore()
-        self.screenSaverInstaller = ScreenSaverInstaller()
+        self.applyCoordinator = WallpaperApplyCoordinator()
         self.nowPlayingProviderFactory = nowPlayingProviderFactory
         self.loginItemStatus = resolvedLoginItemController.status()
+        self.applyCoordinator.statusDidChange = { [weak self] status in
+            self?.applyStatus = status
+        }
 
         scaleMode = loadedPreferences.scaleMode
         muted = loadedPreferences.muted
@@ -263,7 +263,7 @@ final class WallpaperCoordinator {
         guard let content = libraryModel.content(forGalleryItemID: galleryItemID, savedConfigs: savedConfigs) else {
             return false
         }
-        return lockScreenExporter.supportsExport(content)
+        return applyCoordinator.canExportLockScreenWallpaper(content)
     }
 
     func exportLockScreenWallpaper(
@@ -284,42 +284,23 @@ final class WallpaperCoordinator {
         }
 
         do {
-            let resolvedContent = content.resolvingSecurityScopedBookmarks()
-            updateApplyStatus(
-                content: resolvedContent,
-                displayCount: targetIDs.count,
-                desktop: nil,
-                lockScreen: .init(state: .applying, detail: "Exporting"),
-                screenSaver: screenSaverConfigurationStore.supports(resolvedContent)
-                    ? .init(state: .applying, detail: "Updating")
-                    : .init(state: .skipped, detail: "Video only")
-            )
-            await showApplyProgressFrame(duration: .primary)
-            try screenSaverConfigurationStore.save(content: resolvedContent)
-            try await lockScreenExporter.export(
-                content: resolvedContent,
-                displayIDs: lockScreenSelectionDisplayIDs(
-                    for: displaySelection.orderedDisplayIDs(from: targetIDs)
-                )
-            )
-            await showApplyProgressFrame(duration: .verification)
-            updateApplyStatus(
-                content: resolvedContent,
-                displayCount: targetIDs.count,
-                desktop: nil,
-                lockScreen: await settledVerifiedLockScreenStatus(for: resolvedContent, displayIDs: targetIDs),
-                screenSaver: .init(state: .applied, detail: "Updated")
+            try await applyCoordinator.exportLockScreenWallpaper(
+                content: content,
+                targetDisplayIDs: targetIDs,
+                applyAutomatically: applyLockScreenAutomatically,
+                availableDisplayIDs: availableDisplayIDs,
+                orderedDisplayIDs: displaySelection.orderedDisplayIDs
             )
             lastError = nil
         } catch {
-            markApplyStatusFailed(detail: error.localizedDescription)
+            applyCoordinator.markStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
 
     func installScreenSaver() {
         do {
-            try screenSaverInstaller.install()
+            try applyCoordinator.installScreenSaver()
             isScreenSaverInstalled = true
             lastError = nil
         } catch {
@@ -328,7 +309,7 @@ final class WallpaperCoordinator {
     }
 
     func openScreenSaverSettings() {
-        screenSaverInstaller.openScreenSaverSettings()
+        applyCoordinator.openScreenSaverSettings()
     }
 
     func applySelectedContent() async {
@@ -357,14 +338,17 @@ final class WallpaperCoordinator {
             var updatedConfigs = activeConfigs
             var updatedMusicSyncStandbyConfigs = musicSyncStandbyConfigs
             let orderedTargetIDs = displaySelection.orderedDisplayIDs(from: targetIDs)
-            updateApplyStatus(
+            applyCoordinator.updateStatus(
                 content: content,
                 displayCount: orderedTargetIDs.count,
                 desktop: .init(state: .applying, detail: "Applying"),
-                lockScreen: lockScreenStatusBeforeExport(for: content),
-                screenSaver: screenSaverStatusBeforeExport(for: content)
+                lockScreen: applyCoordinator.lockScreenStatusBeforeExport(
+                    for: content,
+                    applyAutomatically: applyLockScreenAutomatically
+                ),
+                screenSaver: applyCoordinator.screenSaverStatusBeforeExport(for: content)
             )
-            await showApplyProgressFrame(duration: .primary)
+            await applyCoordinator.showProgressFrame(duration: .primary)
 
             for displayID in orderedTargetIDs {
                 let config = desiredConfig(displayID: displayID, content: content)
@@ -388,26 +372,39 @@ final class WallpaperCoordinator {
                 syncLibraryState()
                 await refreshRuntimePolicy()
             }
-            updateApplyStatus(
+            applyCoordinator.updateStatus(
                 content: content,
                 displayCount: orderedTargetIDs.count,
                 desktop: .init(state: .applied, detail: "Applied"),
-                lockScreen: lockScreenStatusBeforeExport(for: content),
-                screenSaver: screenSaverStatusBeforeExport(for: content)
+                lockScreen: applyCoordinator.lockScreenStatusBeforeExport(
+                    for: content,
+                    applyAutomatically: applyLockScreenAutomatically
+                ),
+                screenSaver: applyCoordinator.screenSaverStatusBeforeExport(for: content)
             )
-            await showApplyProgressFrame(duration: .secondary)
-            try await exportLockScreenWallpaperIfNeeded(for: content, displayIDs: orderedTargetIDs)
-            await showApplyProgressFrame(duration: .verification)
-            updateApplyStatus(
+            await applyCoordinator.showProgressFrame(duration: .secondary)
+            try await applyCoordinator.exportLockScreenWallpaperIfNeeded(
+                for: content,
+                displayIDs: orderedTargetIDs,
+                applyAutomatically: applyLockScreenAutomatically,
+                availableDisplayIDs: availableDisplayIDs
+            )
+            await applyCoordinator.showProgressFrame(duration: .verification)
+            applyCoordinator.updateStatus(
                 content: content,
                 displayCount: orderedTargetIDs.count,
                 desktop: .init(state: .applied, detail: "Applied"),
-                lockScreen: await settledVerifiedLockScreenStatus(for: content, displayIDs: orderedTargetIDs),
-                screenSaver: screenSaverStatusAfterExport(for: content)
+                lockScreen: await applyCoordinator.settledVerifiedLockScreenStatus(
+                    for: content,
+                    displayIDs: orderedTargetIDs,
+                    applyAutomatically: applyLockScreenAutomatically,
+                    orderedDisplayIDs: displaySelection.orderedDisplayIDs
+                ),
+                screenSaver: applyCoordinator.screenSaverStatusAfterExport(for: content)
             )
             lastError = nil
         } catch {
-            markApplyStatusFailed(detail: error.localizedDescription)
+            applyCoordinator.markStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
@@ -435,11 +432,16 @@ final class WallpaperCoordinator {
 
             try await applyRuntimeConfigs(updatedConfigs)
             await refreshRuntimePolicy()
-            try await syncLockScreenWallpapersIfNeeded(for: targetConfigs)
+            try await applyCoordinator.syncLockScreenWallpapersIfNeeded(
+                for: targetConfigs,
+                applyAutomatically: applyLockScreenAutomatically,
+                availableDisplayIDs: availableIDs,
+                orderedDisplayIDs: displaySelection.orderedDisplayIDs
+            )
             syncApplyStatusFromActiveConfigs()
             lastError = nil
         } catch {
-            markApplyStatusFailed(detail: error.localizedDescription)
+            applyCoordinator.markStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
@@ -568,6 +570,7 @@ final class WallpaperCoordinator {
             return
         }
 
+        manuallyPausedDisplayIDs.insert(displayID)
         await runtimeController.pause(displayID: displayID)
         syncRuntimeState()
         lastError = nil
@@ -578,11 +581,13 @@ final class WallpaperCoordinator {
             return
         }
 
+        manuallyPausedDisplayIDs.remove(displayID)
         runtimeController.removePausedDisplay(displayID)
         await refreshActiveRuntimeConfigs()
     }
 
     func pauseAll() async {
+        manuallyPausedDisplayIDs.formUnion(activeConfigs.keys)
         for displayID in displaySelection.orderedDisplayIDs(from: Set(activeConfigs.keys)) {
             await runtimeController.pause(displayID: displayID)
         }
@@ -591,6 +596,7 @@ final class WallpaperCoordinator {
     }
 
     func resumeAll() async {
+        manuallyPausedDisplayIDs.subtract(activeConfigs.keys)
         for displayID in activeConfigs.keys {
             runtimeController.removePausedDisplay(displayID)
         }
@@ -598,6 +604,7 @@ final class WallpaperCoordinator {
     }
 
     func stopDisplay(displayID: DisplayID) async {
+        manuallyPausedDisplayIDs.remove(displayID)
         await runtimeController.stop(displayID: displayID)
         syncRuntimeState()
         updatePeriodicRuntimePolicyRefresh()
@@ -609,6 +616,7 @@ final class WallpaperCoordinator {
             preMusicSyncConfigs = nil
             isMusicSyncRuntimeApplied = false
         }
+        manuallyPausedDisplayIDs.removeAll()
         await runtimeController.stopAll()
         syncRuntimeState()
         updatePeriodicRuntimePolicyRefresh()
@@ -626,6 +634,7 @@ final class WallpaperCoordinator {
             .filter { $0.value.content.galleryID == id }
             .map(\.key)
         for displayID in displayIDsToStop {
+            manuallyPausedDisplayIDs.remove(displayID)
             await runtimeController.stop(displayID: displayID)
         }
         syncRuntimeState()
@@ -689,134 +698,13 @@ final class WallpaperCoordinator {
         steamDownloadLog = steamController.steamDownloadLog
     }
 
-    private func updateApplyStatus(
-        content: WallpaperContent,
-        displayCount: Int,
-        desktop: WallpaperApplySurfaceStatus?,
-        lockScreen: WallpaperApplySurfaceStatus?,
-        screenSaver: WallpaperApplySurfaceStatus?
-    ) {
-        applyStatus = WallpaperApplyStatus(
-            contentName: content.displayName,
-            displayCount: displayCount,
-            desktop: desktop ?? applyStatus.desktop,
-            lockScreen: lockScreen ?? applyStatus.lockScreen,
-            screenSaver: screenSaver ?? applyStatus.screenSaver
-        )
-    }
-
-    private func showApplyProgressFrame(duration: ApplyProgressDuration) async {
-        await Task.yield()
-        try? await Task.sleep(nanoseconds: duration.nanoseconds)
-    }
-
-    private func markApplyStatusFailed(detail: String) {
-        applyStatus.desktop = failIfApplying(applyStatus.desktop, detail: detail)
-        applyStatus.lockScreen = failIfApplying(applyStatus.lockScreen, detail: detail)
-        applyStatus.screenSaver = failIfApplying(applyStatus.screenSaver, detail: detail)
-    }
-
-    private func failIfApplying(
-        _ status: WallpaperApplySurfaceStatus,
-        detail: String
-    ) -> WallpaperApplySurfaceStatus {
-        status.state == .applying ? .init(state: .failed, detail: detail) : status
-    }
-
-    private func lockScreenStatusBeforeExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
-        guard applyLockScreenAutomatically else {
-            return .init(state: .skipped, detail: "Auto off")
-        }
-
-        guard lockScreenExporter.supportsExport(content.resolvingSecurityScopedBookmarks()) else {
-            return .init(state: .skipped, detail: "Video only")
-        }
-
-        return .init(state: .applying, detail: "Exporting")
-    }
-
-    private func lockScreenStatusAfterExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
-        guard applyLockScreenAutomatically else {
-            return .init(state: .skipped, detail: "Auto off")
-        }
-
-        guard lockScreenExporter.supportsExport(content.resolvingSecurityScopedBookmarks()) else {
-            return .init(state: .skipped, detail: "Video only")
-        }
-
-        return .init(state: .applied, detail: "Exported")
-    }
-
-    private func verifiedLockScreenStatus(
-        for content: WallpaperContent,
-        displayIDs: some Collection<DisplayID>
-    ) -> WallpaperApplySurfaceStatus {
-        guard applyLockScreenAutomatically else {
-            return .init(state: .skipped, detail: "Auto off")
-        }
-
-        let resolvedContent = content.resolvingSecurityScopedBookmarks()
-        guard lockScreenExporter.supportsExport(resolvedContent) else {
-            return .init(state: .skipped, detail: "Video only")
-        }
-
-        let orderedDisplayIDs = displaySelection.orderedDisplayIDs(from: Set(displayIDs))
-        guard lockScreenExporter.isExportSelected(content: resolvedContent, displayIDs: orderedDisplayIDs) else {
-            return .init(state: .failed, detail: "Not selected")
-        }
-
-        return .init(state: .applied, detail: "Exported")
-    }
-
-    private func settledVerifiedLockScreenStatus(
-        for content: WallpaperContent,
-        displayIDs: some Collection<DisplayID>
-    ) async -> WallpaperApplySurfaceStatus {
-        let firstStatus = verifiedLockScreenStatus(for: content, displayIDs: displayIDs)
-        guard firstStatus.state == .failed else {
-            return firstStatus
-        }
-
-        try? await Task.sleep(nanoseconds: 250_000_000)
-        return verifiedLockScreenStatus(for: content, displayIDs: displayIDs)
-    }
-
-    private func screenSaverStatusBeforeExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
-        screenSaverConfigurationStore.supports(content.resolvingSecurityScopedBookmarks())
-            ? .init(state: .applying, detail: "Updating")
-            : .init(state: .skipped, detail: "Video only")
-    }
-
-    private func screenSaverStatusAfterExport(for content: WallpaperContent) -> WallpaperApplySurfaceStatus {
-        screenSaverConfigurationStore.supports(content.resolvingSecurityScopedBookmarks())
-            ? .init(state: .applied, detail: "Updated")
-            : .init(state: .skipped, detail: "Video only")
-    }
-
     private func syncApplyStatusFromActiveConfigs() {
-        let availableDisplayIDs = Set(displays.map(\.id))
-        let configs = Array(activeConfigs.values)
-        let fallbackConfigs = savedConfigs
-            .filter { availableDisplayIDs.contains($0.key) }
-            .map { WallpaperRuntimeController.desiredConfig(from: $0.value) }
-        let visibleConfigs = configs.isEmpty ? fallbackConfigs : configs
-        guard let firstConfig = visibleConfigs.first else {
-            applyStatus = .idle
-            return
-        }
-
-        let matchingConfigs = visibleConfigs.filter {
-            $0.content.galleryID == firstConfig.content.galleryID
-        }
-        applyStatus = WallpaperApplyStatus(
-            contentName: firstConfig.content.displayName,
-            displayCount: matchingConfigs.count,
-            desktop: .init(state: .applied, detail: "Restored"),
-            lockScreen: verifiedLockScreenStatus(
-                for: firstConfig.content,
-                displayIDs: matchingConfigs.map(\.displayID)
-            ),
-            screenSaver: screenSaverStatusAfterExport(for: firstConfig.content)
+        applyCoordinator.refreshStatus(
+            activeConfigs: activeConfigs,
+            savedConfigs: savedConfigs,
+            availableDisplayIDs: Set(displays.map(\.id)),
+            applyAutomatically: applyLockScreenAutomatically,
+            orderedDisplayIDs: displaySelection.orderedDisplayIDs
         )
     }
 
@@ -837,128 +725,6 @@ final class WallpaperCoordinator {
                 musicWallpaperStyle: musicWallpaperStyle
             )
         )
-    }
-
-    private func exportLockScreenWallpaperIfNeeded(
-        for content: WallpaperContent,
-        displayIDs: [DisplayID]
-    ) async throws {
-        let resolvedContent = content.resolvingSecurityScopedBookmarks()
-        if screenSaverConfigurationStore.supports(resolvedContent) {
-            try screenSaverConfigurationStore.save(content: resolvedContent)
-        }
-
-        guard applyLockScreenAutomatically else {
-            return
-        }
-
-        guard lockScreenExporter.supportsExport(resolvedContent) else {
-            return
-        }
-
-        try await lockScreenExporter.export(
-            content: resolvedContent,
-            displayIDs: lockScreenSelectionDisplayIDs(for: displayIDs)
-        )
-    }
-
-    private func syncLockScreenWallpapersIfNeeded(
-        for savedConfigs: [DisplayID: SavedWallpaperConfig]
-    ) async throws {
-        guard applyLockScreenAutomatically else {
-            return
-        }
-
-        let orderedDisplayIDs = displaySelection.orderedDisplayIDs(from: Set(savedConfigs.keys))
-        var exportItems: [(displayID: DisplayID, content: WallpaperContent)] = []
-        for displayID in orderedDisplayIDs {
-            guard let config = savedConfigs[displayID] else {
-                continue
-            }
-
-            let resolvedContent = config.content.resolvingSecurityScopedBookmarks()
-            if screenSaverConfigurationStore.supports(resolvedContent) {
-                try screenSaverConfigurationStore.save(content: resolvedContent)
-            }
-
-            guard lockScreenExporter.supportsExport(resolvedContent) else {
-                continue
-            }
-
-            exportItems.append((displayID: displayID, content: resolvedContent))
-        }
-
-        guard !exportItems.isEmpty else {
-            return
-        }
-
-        let exportDisplayIDs = exportItems.map(\.displayID)
-        guard !lockScreenSelectionsMatch(savedConfigs, displayIDs: exportDisplayIDs) else {
-            return
-        }
-
-        try await exportLockScreenItems(exportItems)
-        await showApplyProgressFrame(duration: .verification)
-
-        guard lockScreenSelectionsMatch(savedConfigs, displayIDs: exportDisplayIDs) else {
-            try await exportLockScreenItems(exportItems)
-            await showApplyProgressFrame(duration: .verification)
-            guard lockScreenSelectionsMatch(savedConfigs, displayIDs: exportDisplayIDs) else {
-                throw AerialLockScreenExportError.invalidWallpaperIndex(
-                    FileManager.default.homeDirectoryForCurrentUser
-                        .appendingPathComponent("Library/Application Support/com.apple.wallpaper/Store/Index.plist")
-                )
-            }
-            return
-        }
-    }
-
-    private func lockScreenSelectionsMatch(
-        _ savedConfigs: [DisplayID: SavedWallpaperConfig],
-        displayIDs: [DisplayID]
-    ) -> Bool {
-        for displayID in displayIDs {
-            guard let config = savedConfigs[displayID] else {
-                continue
-            }
-
-            let resolvedContent = config.content.resolvingSecurityScopedBookmarks()
-            guard lockScreenExporter.supportsExport(resolvedContent) else {
-                continue
-            }
-
-            guard lockScreenExporter.isExportSelected(content: resolvedContent, displayIDs: [displayID]) else {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    private func exportLockScreenItems(
-        _ exportItems: [(displayID: DisplayID, content: WallpaperContent)]
-    ) async throws {
-        guard let firstItem = exportItems.first else {
-            return
-        }
-
-        let displayIDs = exportItems.map(\.displayID)
-        if shouldUseGlobalLockScreenSelection(for: displayIDs),
-           exportItems.allSatisfy({ $0.content.galleryID == firstItem.content.galleryID }) {
-            try await lockScreenExporter.export(content: firstItem.content, displayIDs: [])
-            return
-        }
-
-        try await lockScreenExporter.export(contentsByDisplayID: exportItems)
-    }
-
-    private func lockScreenSelectionDisplayIDs(for displayIDs: [DisplayID]) -> [DisplayID] {
-        shouldUseGlobalLockScreenSelection(for: displayIDs) ? [] : displayIDs
-    }
-
-    private func shouldUseGlobalLockScreenSelection(for displayIDs: [DisplayID]) -> Bool {
-        let availableDisplayIDs = Set(displays.map(\.id))
-        return !availableDisplayIDs.isEmpty && Set(displayIDs) == availableDisplayIDs
     }
 
     private func enableDisplay(_ displayID: DisplayID) async {
@@ -993,6 +759,7 @@ final class WallpaperCoordinator {
     }
 
     private func disableDisplay(_ displayID: DisplayID) async {
+        manuallyPausedDisplayIDs.remove(displayID)
         await runtimeController.stop(displayID: displayID)
         syncRuntimeState()
         savedConfigs.removeValue(forKey: displayID)
@@ -1023,6 +790,7 @@ final class WallpaperCoordinator {
 
     private func applyRuntimeConfigs(_ desiredConfigs: [DisplayID: WallpaperConfig]) async throws {
         policyController.refreshDetectedPolicyState()
+        manuallyPausedDisplayIDs.formIntersection(Set(desiredConfigs.keys))
 
         let audioOwnerID = displaySelection.audioOwnerID(
             activeDisplayIDs: Set(desiredConfigs.keys),
@@ -1030,7 +798,7 @@ final class WallpaperCoordinator {
         )
         let pausedDisplayIDs = Set(desiredConfigs.compactMap { displayID, config in
             policyController.pauseReasons(for: displayID, config: config).isEmpty ? nil : displayID
-        })
+        }).union(manuallyPausedDisplayIDs)
 
         try await runtimeController.applyRuntimeConfigs(
             desiredConfigs,
@@ -1049,6 +817,7 @@ final class WallpaperCoordinator {
         for displayID in displaySelection.orderedDisplayIDs(from: removedDisplayIDs) {
             await runtimeController.stop(displayID: displayID)
         }
+        manuallyPausedDisplayIDs.subtract(removedDisplayIDs)
 
         try await applyRuntimeConfigs(desiredConfigs)
     }
@@ -1274,10 +1043,15 @@ final class WallpaperCoordinator {
         do {
             try await applyRuntimeConfigs(updatedConfigs)
             let restoredConfigs = savedConfigs.filter { restoreDisplayIDs.contains($0.key) }
-            try await syncLockScreenWallpapersIfNeeded(for: restoredConfigs)
+            try await applyCoordinator.syncLockScreenWallpapersIfNeeded(
+                for: restoredConfigs,
+                applyAutomatically: applyLockScreenAutomatically,
+                availableDisplayIDs: availableDisplayIDs,
+                orderedDisplayIDs: displaySelection.orderedDisplayIDs
+            )
             syncApplyStatusFromActiveConfigs()
         } catch {
-            markApplyStatusFailed(detail: error.localizedDescription)
+            applyCoordinator.markStatusFailed(detail: error.localizedDescription)
             lastError = error.localizedDescription
         }
     }
@@ -1307,11 +1081,13 @@ final class WallpaperCoordinator {
 
     private func applyRuntimePolicy() async {
         let activeDisplayIDs = Set(activeConfigs.keys)
+        manuallyPausedDisplayIDs.formIntersection(activeDisplayIDs)
         runtimeController.intersectPausedDisplays(with: activeDisplayIDs)
         let audioOwnerID = displaySelection.audioOwnerID(activeDisplayIDs: activeDisplayIDs, muted: muted)
 
         for (displayID, config) in activeConfigs {
-            let shouldPause = !policyController.pauseReasons(for: displayID, config: config).isEmpty
+            let shouldPause = !policyController.pauseReasons(for: displayID, config: config).isEmpty ||
+                manuallyPausedDisplayIDs.contains(displayID)
 
             if shouldPause {
                 await runtimeController.pause(displayID: displayID)
