@@ -46,6 +46,8 @@ YouTube and other embedded media can be limited by autoplay, audio, and embed po
 
 LivePaper can export supported video wallpapers to the macOS Lock Screen. When `Settings > Lock Screen > Apply with Wallpaper` is enabled, pressing `Apply This Wallpaper` also exports the same video to macOS's Aerial wallpaper asset store. The wallpaper detail view also has a lock button for manually exporting a supported video.
 
+Only video-backed wallpapers are eligible for automatic Lock Screen export. Web wallpapers can still run on the desktop inside LivePaper, but they are not converted into Lock Screen assets.
+
 This feature supports:
 
 - Local video wallpapers.
@@ -58,6 +60,8 @@ The implementation patches the user-level macOS Aerial wallpaper manifest under 
 ## Screen Saver
 
 LivePaper includes a video-only `.saver` companion bundle. The app stores the latest supported video wallpaper in `~/Library/Application Support/LivePaper/ScreenSaverConfig.json`, and the screen saver reads that file to play the same video with `AVPlayerLayer`.
+
+Applying a supported video wallpaper automatically updates the screen saver configuration. The `.saver` bundle is installed separately because macOS screen savers must be selected from System Settings.
 
 To use it:
 
@@ -114,6 +118,7 @@ LivePaper/
   Runtime/                        AppKit wallpaper windows and playback/runtime controllers
   SharedUI/                       reusable SwiftUI components and first-launch intro
   Assets.xcassets/                app icon and menu bar icon assets
+LivePaperScreenSaver/             bundled video-only macOS screen saver
 
 LivePaperTests/                   unit tests for runtime policy, settings, import helpers, etc.
 DesignPreview/                    source logo/icon preview assets
