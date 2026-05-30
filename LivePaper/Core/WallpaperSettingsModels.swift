@@ -9,6 +9,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
     let pauseOnBattery: Bool
     let pauseOnFullscreen: Bool
     let muteOnFullscreen: Bool
+    let musicStyle: MusicWallpaperStyle
 
     init(
         displayID: DisplayID,
@@ -18,7 +19,8 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         muted: Bool,
         pauseOnBattery: Bool,
         pauseOnFullscreen: Bool,
-        muteOnFullscreen: Bool = false
+        muteOnFullscreen: Bool = false,
+        musicStyle: MusicWallpaperStyle = .ambient
     ) {
         self.displayID = displayID
         self.content = content
@@ -28,6 +30,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         self.pauseOnBattery = pauseOnBattery
         self.pauseOnFullscreen = pauseOnFullscreen
         self.muteOnFullscreen = muteOnFullscreen
+        self.musicStyle = musicStyle
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -40,6 +43,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         case pauseOnBattery
         case pauseOnFullscreen
         case muteOnFullscreen
+        case musicStyle
     }
 
     init(from decoder: Decoder) throws {
@@ -57,6 +61,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         pauseOnBattery = try container.decode(Bool.self, forKey: .pauseOnBattery)
         pauseOnFullscreen = try container.decode(Bool.self, forKey: .pauseOnFullscreen)
         muteOnFullscreen = try container.decodeIfPresent(Bool.self, forKey: .muteOnFullscreen) ?? false
+        musicStyle = try container.decodeIfPresent(MusicWallpaperStyle.self, forKey: .musicStyle) ?? .ambient
     }
 
     func encode(to encoder: Encoder) throws {
@@ -69,6 +74,7 @@ struct SavedWallpaperConfig: Codable, Equatable, Sendable {
         try container.encode(pauseOnBattery, forKey: .pauseOnBattery)
         try container.encode(pauseOnFullscreen, forKey: .pauseOnFullscreen)
         try container.encode(muteOnFullscreen, forKey: .muteOnFullscreen)
+        try container.encode(musicStyle, forKey: .musicStyle)
     }
 }
 
@@ -81,4 +87,8 @@ struct RuntimePreferences: Equatable, Sendable {
     var pauseOnFullscreen: Bool
     var muteOnFullscreen: Bool
     var applyLockScreenAutomatically: Bool
+    var synchronizeMatchingWallpapers: Bool
+    var musicSyncSource: WallpaperContent.MusicSource
+    var isMusicSyncEnabled: Bool
+    var musicWallpaperStyle: MusicWallpaperStyle
 }

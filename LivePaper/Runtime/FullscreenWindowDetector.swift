@@ -33,6 +33,37 @@ enum FullscreenWindowDetector {
         return coveredDisplayIDs
     }
 
+    static func isMissionControlActive() -> Bool {
+        guard let windowInfos = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return false
+        }
+
+        return isMissionControlActive(
+            windowInfos: windowInfos,
+            displayBounds: displayInfos().map(\.bounds)
+        )
+    }
+
+    static func isMissionControlActive(windowInfos: [[String: Any]], displayBounds: [CGRect]) -> Bool {
+        guard !displayBounds.isEmpty else {
+            return false
+        }
+
+        return windowInfos.contains { windowInfo in
+            guard isDockOverlayWindow(windowInfo),
+                  let bounds = windowBounds(from: windowInfo) else {
+                return false
+            }
+
+            return displayBounds.contains { displayBounds in
+                covers(windowBounds: bounds, targetBounds: displayBounds, coverageThreshold: 0.98)
+            }
+        }
+    }
+
     private struct DisplayInfo {
         let id: DisplayID
         let bounds: CGRect
@@ -57,15 +88,29 @@ enum FullscreenWindowDetector {
         }
     }
 
-    private static func isCandidateFullscreenWindow(
+    static func isCandidateFullscreenWindow(
         _ windowInfo: [String: Any],
         currentProcessID: Int32
     ) -> Bool {
         let layer = (windowInfo[kCGWindowLayer as String] as? NSNumber)?.intValue
         let ownerProcessID = (windowInfo[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value
+        let ownerName = windowInfo[kCGWindowOwnerName as String] as? String
         let alpha = (windowInfo[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
 
-        return layer == 0 && ownerProcessID != currentProcessID && alpha > 0
+        return layer == 0
+            && ownerProcessID != currentProcessID
+            && ownerName != "Dock"
+            && alpha > 0
+    }
+
+    private static func isDockOverlayWindow(_ windowInfo: [String: Any]) -> Bool {
+        let layer = (windowInfo[kCGWindowLayer as String] as? NSNumber)?.intValue
+        let ownerName = windowInfo[kCGWindowOwnerName as String] as? String
+        let alpha = (windowInfo[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
+
+        return ownerName == "Dock"
+            && (layer == 18 || layer == 20)
+            && alpha > 0
     }
 
     private static func windowBounds(from windowInfo: [String: Any]) -> CGRect? {

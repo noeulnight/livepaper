@@ -13,6 +13,10 @@ final class WallpaperSettingsStore {
         static let pauseOnFullscreen = "wallpaper.pauseOnFullscreen"
         static let muteOnFullscreen = "wallpaper.muteOnFullscreen"
         static let applyLockScreenAutomatically = "wallpaper.applyLockScreenAutomatically"
+        static let synchronizeMatchingWallpapers = "wallpaper.synchronizeMatchingWallpapers"
+        static let musicSyncSource = "wallpaper.musicSyncSource"
+        static let isMusicSyncEnabled = "wallpaper.isMusicSyncEnabled"
+        static let musicWallpaperStyle = "wallpaper.musicWallpaperStyle"
         static let steamCMDPath = "steam.steamCMDPath"
         static let steamCMDBookmark = "steam.steamCMDBookmark"
         static let steamCMDLoginMode = "steam.loginMode"
@@ -35,7 +39,11 @@ final class WallpaperSettingsStore {
             pauseOnBattery: defaults.object(forKey: Keys.pauseOnBattery) as? Bool ?? true,
             pauseOnFullscreen: defaults.object(forKey: Keys.pauseOnFullscreen) as? Bool ?? true,
             muteOnFullscreen: defaults.object(forKey: Keys.muteOnFullscreen) as? Bool ?? false,
-            applyLockScreenAutomatically: defaults.object(forKey: Keys.applyLockScreenAutomatically) as? Bool ?? true
+            applyLockScreenAutomatically: defaults.object(forKey: Keys.applyLockScreenAutomatically) as? Bool ?? true,
+            synchronizeMatchingWallpapers: defaults.object(forKey: Keys.synchronizeMatchingWallpapers) as? Bool ?? true,
+            musicSyncSource: WallpaperContent.MusicSource(rawValue: defaults.string(forKey: Keys.musicSyncSource) ?? "") ?? .appleMusic,
+            isMusicSyncEnabled: defaults.object(forKey: Keys.isMusicSyncEnabled) as? Bool ?? false,
+            musicWallpaperStyle: MusicWallpaperStyle(rawValue: defaults.string(forKey: Keys.musicWallpaperStyle) ?? "") ?? .ambient
         )
     }
 
@@ -52,6 +60,10 @@ final class WallpaperSettingsStore {
         defaults.set(preferences.pauseOnFullscreen, forKey: Keys.pauseOnFullscreen)
         defaults.set(preferences.muteOnFullscreen, forKey: Keys.muteOnFullscreen)
         defaults.set(preferences.applyLockScreenAutomatically, forKey: Keys.applyLockScreenAutomatically)
+        defaults.set(preferences.synchronizeMatchingWallpapers, forKey: Keys.synchronizeMatchingWallpapers)
+        defaults.set(preferences.musicSyncSource.rawValue, forKey: Keys.musicSyncSource)
+        defaults.set(preferences.isMusicSyncEnabled, forKey: Keys.isMusicSyncEnabled)
+        defaults.set(preferences.musicWallpaperStyle.rawValue, forKey: Keys.musicWallpaperStyle)
     }
 
     func shouldShowFirstLaunchIntro(hasExistingWallpapers: Bool) -> Bool {
@@ -87,7 +99,8 @@ final class WallpaperSettingsStore {
                     muted: $0.muted,
                     pauseOnBattery: $0.pauseOnBattery,
                     pauseOnFullscreen: $0.pauseOnFullscreen,
-                    muteOnFullscreen: $0.muteOnFullscreen
+                    muteOnFullscreen: $0.muteOnFullscreen,
+                    musicStyle: $0.musicStyle
                 )
                 return (resolvedConfig.displayID, resolvedConfig)
             }

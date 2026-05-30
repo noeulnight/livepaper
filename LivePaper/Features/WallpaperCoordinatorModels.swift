@@ -33,6 +33,8 @@ struct WallpaperGalleryItem: Identifiable, Hashable, Sendable {
             mediaType = "Video"
         case .web:
             mediaType = url.isFileURL ? "Web folder" : "Web page"
+        case .music:
+            mediaType = "Album sync"
         }
 
         if steamWorkshopID != nil {

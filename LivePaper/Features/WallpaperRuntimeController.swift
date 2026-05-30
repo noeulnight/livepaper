@@ -45,9 +45,18 @@ final class WallpaperRuntimeController {
         audioOwnerID: DisplayID?,
         fullscreenDisplayIDs: Set<DisplayID>,
         pausedDisplayIDs: Set<DisplayID>? = nil,
+        synchronizeMatchingWallpapers: Bool = true,
         orderedDisplayIDs: (Set<DisplayID>) -> [DisplayID]
     ) async throws {
         let pausedDisplayIDs = pausedDisplayIDs ?? []
+
+        if synchronizeMatchingWallpapers {
+            await runtime.setMatchingWallpaperAudioLeader(audioOwnerID)
+            await runtime.setSynchronizesMatchingWallpapers(true)
+        } else {
+            await runtime.setSynchronizesMatchingWallpapers(false)
+            await runtime.setMatchingWallpaperAudioLeader(audioOwnerID)
+        }
 
         for displayID in orderedDisplayIDs(Set(desiredConfigs.keys)) {
             guard let config = desiredConfigs[displayID] else {
@@ -88,7 +97,8 @@ final class WallpaperRuntimeController {
         muted: Bool,
         pauseOnBattery: Bool,
         pauseOnFullscreen: Bool,
-        muteOnFullscreen: Bool
+        muteOnFullscreen: Bool,
+        musicStyle: MusicWallpaperStyle = .ambient
     ) -> WallpaperConfig {
         WallpaperConfig(
             displayID: displayID,
@@ -98,7 +108,8 @@ final class WallpaperRuntimeController {
             muted: muted,
             pauseOnBattery: pauseOnBattery,
             pauseOnFullscreen: pauseOnFullscreen,
-            muteOnFullscreen: muteOnFullscreen
+            muteOnFullscreen: muteOnFullscreen,
+            musicStyle: musicStyle
         )
     }
 
@@ -111,7 +122,8 @@ final class WallpaperRuntimeController {
             muted: savedConfig.muted,
             pauseOnBattery: savedConfig.pauseOnBattery,
             pauseOnFullscreen: savedConfig.pauseOnFullscreen,
-            muteOnFullscreen: savedConfig.muteOnFullscreen
+            muteOnFullscreen: savedConfig.muteOnFullscreen,
+            musicStyle: savedConfig.musicStyle
         )
     }
 
@@ -124,7 +136,8 @@ final class WallpaperRuntimeController {
             muted: config.muted,
             pauseOnBattery: config.pauseOnBattery,
             pauseOnFullscreen: config.pauseOnFullscreen,
-            muteOnFullscreen: config.muteOnFullscreen
+            muteOnFullscreen: config.muteOnFullscreen,
+            musicStyle: config.musicStyle
         )
     }
 
@@ -141,7 +154,8 @@ final class WallpaperRuntimeController {
             muted: shouldMute(config: config, audioOwnerID: audioOwnerID, fullscreenDisplayIDs: fullscreenDisplayIDs),
             pauseOnBattery: config.pauseOnBattery,
             pauseOnFullscreen: config.pauseOnFullscreen,
-            muteOnFullscreen: config.muteOnFullscreen
+            muteOnFullscreen: config.muteOnFullscreen,
+            musicStyle: config.musicStyle
         )
     }
 

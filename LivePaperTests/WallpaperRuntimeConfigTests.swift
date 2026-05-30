@@ -81,11 +81,15 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
             audioOwnerID: displayID,
             fullscreenDisplayIDs: [displayID],
             pausedDisplayIDs: [displayID],
+            synchronizeMatchingWallpapers: false,
             orderedDisplayIDs: { Array($0) }
         )
 
         XCTAssertEqual(controller.activeConfigs[displayID], config)
         XCTAssertEqual(controller.pausedDisplayIDs, [displayID])
+        XCTAssertEqual(runtime.matchingWallpaperAudioLeaderCalls, [displayID])
+        XCTAssertEqual(runtime.synchronizeMatchingWallpapersCalls, [false])
+        XCTAssertEqual(runtime.runtimeOptionEvents, ["sync:false", "audio:display-a"])
         XCTAssertEqual(runtime.pauseCalls, [displayID])
         XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID])
     }
@@ -117,18 +121,61 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
         XCTAssertEqual(runtime.pauseCalls, [displayID])
         XCTAssertEqual(runtime.updateCalls.map(\.displayID), [displayID, displayID])
     }
+
+    func testMatchingWallpaperSynchronizationReferencePrefersAudioLeader() {
+        let displayA = DisplayID(uuid: "display-a")
+        let displayB = DisplayID(uuid: "display-b")
+
+        XCTAssertEqual(
+            InAppWallpaperRuntime.synchronizationReferenceDisplayID(
+                in: [displayA, displayB],
+                audioLeaderDisplayID: displayB
+            ),
+            displayB
+        )
+    }
+
+    func testMatchingWallpaperSynchronizationReferenceFallsBackToRuntimeOrder() {
+        let displayA = DisplayID(uuid: "display-a")
+        let displayB = DisplayID(uuid: "display-b")
+        let displayC = DisplayID(uuid: "display-c")
+
+        XCTAssertEqual(
+            InAppWallpaperRuntime.synchronizationReferenceDisplayID(
+                in: [displayA, displayB],
+                audioLeaderDisplayID: displayC
+            ),
+            displayA
+        )
+    }
 }
 
 @MainActor
 final class RecordingWallpaperRuntime: WallpaperRuntime {
     private(set) var updateCalls: [WallpaperConfig] = []
     private(set) var pauseCalls: [DisplayID] = []
+    private(set) var stopCalls: [DisplayID] = []
+    private(set) var matchingWallpaperAudioLeaderCalls: [DisplayID?] = []
+    private(set) var synchronizeMatchingWallpapersCalls: [Bool] = []
+    private(set) var runtimeOptionEvents: [String] = []
+
+    func setMatchingWallpaperAudioLeader(_ displayID: DisplayID?) async {
+        matchingWallpaperAudioLeaderCalls.append(displayID)
+        runtimeOptionEvents.append("audio:\(displayID?.uuid ?? "nil")")
+    }
+
+    func setSynchronizesMatchingWallpapers(_ isEnabled: Bool) async {
+        synchronizeMatchingWallpapersCalls.append(isEnabled)
+        runtimeOptionEvents.append("sync:\(isEnabled)")
+    }
 
     func start(config: WallpaperConfig) async throws {
         updateCalls.append(config)
     }
 
-    func stop(displayID: DisplayID) async {}
+    func stop(displayID: DisplayID) async {
+        stopCalls.append(displayID)
+    }
 
     func stopAll() async {}
 

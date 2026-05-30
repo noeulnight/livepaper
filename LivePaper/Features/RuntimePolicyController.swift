@@ -9,18 +9,22 @@ final class RuntimePolicyController {
     private var delayedPolicyRefreshTask: Task<Void, Never>?
     private var periodicPolicyRefreshTask: Task<Void, Never>?
     private let fullscreenDetector: @MainActor () -> Set<DisplayID>
+    private let missionControlDetector: @MainActor () -> Bool
     private let requiredStableFullscreenDetections: Int
     private var pendingFullscreenDisplayIDs: Set<DisplayID> = []
     private var stableFullscreenDetectionCount = 0
 
     private(set) var globalPauseReasons: Set<RuntimePauseReason> = []
     private(set) var fullscreenDisplayIDs: Set<DisplayID> = []
+    private(set) var isMissionControlActive = false
 
     init(
         fullscreenDetector: @escaping @MainActor () -> Set<DisplayID> = FullscreenWindowDetector.coveredDisplayIDs,
+        missionControlDetector: @escaping @MainActor () -> Bool = FullscreenWindowDetector.isMissionControlActive,
         requiredStableFullscreenDetections: Int = 2
     ) {
         self.fullscreenDetector = fullscreenDetector
+        self.missionControlDetector = missionControlDetector
         self.requiredStableFullscreenDetections = max(1, requiredStableFullscreenDetections)
     }
 
@@ -91,7 +95,12 @@ final class RuntimePolicyController {
     }
 
     func refreshDetectedPolicyState() {
-        updateStableFullscreenDisplayIDs(detectedDisplayIDs: fullscreenDetector())
+        isMissionControlActive = missionControlDetector()
+        if isMissionControlActive {
+            clearFullscreenDisplayIDs()
+        } else {
+            updateStableFullscreenDisplayIDs(detectedDisplayIDs: fullscreenDetector())
+        }
 
         if SystemPowerState.isOnBatteryPower {
             globalPauseReasons.insert(.battery)
@@ -144,6 +153,12 @@ final class RuntimePolicyController {
     private func stopPeriodicRefresh() {
         periodicPolicyRefreshTask?.cancel()
         periodicPolicyRefreshTask = nil
+    }
+
+    private func clearFullscreenDisplayIDs() {
+        pendingFullscreenDisplayIDs = []
+        stableFullscreenDetectionCount = 0
+        fullscreenDisplayIDs = []
     }
 
     private func updateStableFullscreenDisplayIDs(detectedDisplayIDs: Set<DisplayID>) {

@@ -4,11 +4,42 @@ struct WallpaperContent: Codable, Equatable, Sendable {
     enum Kind: String, Codable, Hashable, Sendable {
         case video
         case web
+        case music
+    }
+
+    enum MusicSource: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+        case appleMusic
+        case spotify
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .appleMusic:
+                return "Apple Music"
+            case .spotify:
+                return "Spotify"
+            }
+        }
+
+        var syncTitle: String {
+            "\(title) Album Sync"
+        }
+
+        var bundleIdentifier: String {
+            switch self {
+            case .appleMusic:
+                return "com.apple.Music"
+            case .spotify:
+                return "com.spotify.client"
+            }
+        }
     }
 
     let kind: Kind
     let url: URL
     let readAccessURL: URL?
+    let musicSource: MusicSource?
     let title: String?
     let previewImageURL: URL?
     let sourceURL: URL?
@@ -20,6 +51,7 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         kind: Kind,
         url: URL,
         readAccessURL: URL?,
+        musicSource: MusicSource? = nil,
         title: String? = nil,
         previewImageURL: URL? = nil,
         sourceURL: URL? = nil,
@@ -30,6 +62,7 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         self.kind = kind
         self.url = url
         self.readAccessURL = readAccessURL
+        self.musicSource = musicSource
         self.title = title?.nilIfBlank
         self.previewImageURL = previewImageURL
         self.sourceURL = sourceURL
@@ -50,6 +83,16 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         WallpaperContent(kind: .web, url: YouTubeEmbedURL.normalizedURL(for: url), readAccessURL: nil)
     }
 
+    static func musicAlbumSync(source: MusicSource) -> WallpaperContent {
+        WallpaperContent(
+            kind: .music,
+            url: URL(string: "livepaper://music/\(source.rawValue)")!,
+            readAccessURL: nil,
+            musicSource: source,
+            title: source.syncTitle
+        )
+    }
+
     func withMetadata(
         title: String? = nil,
         previewImageURL: URL? = nil,
@@ -60,6 +103,7 @@ struct WallpaperContent: Codable, Equatable, Sendable {
             kind: kind,
             url: url,
             readAccessURL: readAccessURL,
+            musicSource: musicSource,
             title: title?.nilIfBlank ?? self.title,
             previewImageURL: previewImageURL ?? self.previewImageURL,
             sourceURL: sourceURL ?? self.sourceURL,
@@ -85,6 +129,9 @@ struct WallpaperContent: Codable, Equatable, Sendable {
         if url.isFileURL {
             return url.lastPathComponent
         }
+        if kind == .music, let musicSource {
+            return musicSource.syncTitle
+        }
         guard let host = url.host?.removingWWWPrefix, !host.isEmpty else {
             return "Web Wallpaper"
         }
@@ -97,11 +144,6 @@ struct WallpaperContent: Codable, Equatable, Sendable {
 }
 
 private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
     var removingWWWPrefix: String {
         hasPrefix("www.") ? String(dropFirst(4)) : self
     }

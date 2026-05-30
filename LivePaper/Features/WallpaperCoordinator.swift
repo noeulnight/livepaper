@@ -4,6 +4,8 @@ import Observation
 @MainActor
 @Observable
 final class WallpaperCoordinator {
+    private static let musicSyncPlaybackRefreshInterval: Duration = .seconds(2)
+
     private let store: WallpaperSettingsStore
     private let libraryModel: WallpaperLibraryModel
     private let displaySelection: DisplaySelectionModel
@@ -14,9 +16,13 @@ final class WallpaperCoordinator {
     private let lockScreenExporter: AerialLockScreenExporter
     private let screenSaverConfigurationStore: ScreenSaverConfigurationStore
     private let screenSaverInstaller: ScreenSaverInstaller
+    private let nowPlayingProviderFactory: @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
+    private var preMusicSyncConfigs: [DisplayID: WallpaperConfig]?
+    private var musicSyncPlaybackMonitorTask: Task<Void, Never>?
+    private var isMusicSyncRuntimeApplied = false
 
     private(set) var lastError: String?
     private(set) var displays: [DisplayState] = []
@@ -46,6 +52,10 @@ final class WallpaperCoordinator {
     var pauseOnFullscreen = true
     var muteOnFullscreen = false
     var applyLockScreenAutomatically = true
+    var synchronizeMatchingWallpapers = true
+    var musicSyncSource: WallpaperContent.MusicSource = .appleMusic
+    var musicWallpaperStyle: MusicWallpaperStyle = .ambient
+    private(set) var isMusicSyncEnabled = false
 
     var audioDisplayID: DisplayID? {
         didSet {
@@ -68,7 +78,10 @@ final class WallpaperCoordinator {
     init(
         runtime: WallpaperRuntime? = nil,
         store: WallpaperSettingsStore? = nil,
-        loginItemController: LoginItemController? = nil
+        loginItemController: LoginItemController? = nil,
+        nowPlayingProviderFactory: @escaping @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding = {
+            AppleScriptNowPlayingProvider(source: $0)
+        }
     ) {
         let resolvedStore = store ?? WallpaperSettingsStore()
         let resolvedRuntime = runtime ?? InAppWallpaperRuntime()
@@ -87,6 +100,7 @@ final class WallpaperCoordinator {
         self.lockScreenExporter = AerialLockScreenExporter()
         self.screenSaverConfigurationStore = ScreenSaverConfigurationStore()
         self.screenSaverInstaller = ScreenSaverInstaller()
+        self.nowPlayingProviderFactory = nowPlayingProviderFactory
         self.loginItemStatus = resolvedLoginItemController.status()
 
         scaleMode = loadedPreferences.scaleMode
@@ -97,6 +111,10 @@ final class WallpaperCoordinator {
         pauseOnFullscreen = loadedPreferences.pauseOnFullscreen
         muteOnFullscreen = loadedPreferences.muteOnFullscreen
         applyLockScreenAutomatically = loadedPreferences.applyLockScreenAutomatically
+        synchronizeMatchingWallpapers = loadedPreferences.synchronizeMatchingWallpapers
+        musicSyncSource = loadedPreferences.musicSyncSource
+        isMusicSyncEnabled = loadedPreferences.isMusicSyncEnabled
+        musicWallpaperStyle = loadedPreferences.musicWallpaperStyle
         steamCMDLoginMode = steamController.steamCMDLoginMode
         steamUsername = steamController.steamUsername
 
@@ -112,6 +130,7 @@ final class WallpaperCoordinator {
     }
 
     func shutdown() async {
+        stopMusicSyncPlaybackMonitor()
         await stopAll()
 
         if let displayObserver {
@@ -336,6 +355,7 @@ final class WallpaperCoordinator {
             selectedDisplayIDs = targetIDs
 
             var updatedConfigs = activeConfigs
+            var updatedMusicSyncStandbyConfigs = musicSyncStandbyConfigs
             let orderedTargetIDs = displaySelection.orderedDisplayIDs(from: targetIDs)
             updateApplyStatus(
                 content: content,
@@ -348,15 +368,26 @@ final class WallpaperCoordinator {
 
             for displayID in orderedTargetIDs {
                 let config = desiredConfig(displayID: displayID, content: content)
-                updatedConfigs[displayID] = config
-                runtimeController.removePausedDisplay(displayID)
+                if isMusicSyncEnabled {
+                    updatedMusicSyncStandbyConfigs[displayID] = config
+                } else {
+                    updatedConfigs[displayID] = config
+                    runtimeController.removePausedDisplay(displayID)
+                }
                 savedConfigs[displayID] = WallpaperRuntimeController.savedConfig(from: config)
             }
 
-            try await applyRuntimeConfigs(updatedConfigs)
-            store.save(configs: savedConfigs)
-            syncLibraryState()
-            await refreshRuntimePolicy()
+            if isMusicSyncEnabled {
+                preMusicSyncConfigs = updatedMusicSyncStandbyConfigs
+                store.save(configs: savedConfigs)
+                syncLibraryState()
+                await refreshMusicSyncPlaybackState()
+            } else {
+                try await applyRuntimeConfigs(updatedConfigs)
+                store.save(configs: savedConfigs)
+                syncLibraryState()
+                await refreshRuntimePolicy()
+            }
             updateApplyStatus(
                 content: content,
                 displayCount: orderedTargetIDs.count,
@@ -441,6 +472,63 @@ final class WallpaperCoordinator {
         await refreshActiveRuntimeConfigs()
     }
 
+    func setMusicSyncSource(_ source: WallpaperContent.MusicSource) async {
+        guard musicSyncSource != source else {
+            return
+        }
+
+        musicSyncSource = source
+        saveRuntimePreferences()
+
+        if isMusicSyncEnabled {
+            await refreshMusicSyncPlaybackState()
+        }
+    }
+
+    func setMusicWallpaperStyle(_ style: MusicWallpaperStyle) async {
+        guard musicWallpaperStyle != style else {
+            return
+        }
+
+        musicWallpaperStyle = style
+        saveRuntimePreferences()
+
+        if isMusicSyncEnabled {
+            await refreshMusicSyncPlaybackState()
+        }
+    }
+
+    func setMusicSyncEnabled(_ isEnabled: Bool) async {
+        guard isMusicSyncEnabled != isEnabled else {
+            return
+        }
+
+        if isEnabled {
+            preMusicSyncConfigs = activeConfigs
+            isMusicSyncRuntimeApplied = false
+            isMusicSyncEnabled = true
+            saveRuntimePreferences()
+            startMusicSyncPlaybackMonitor()
+            await refreshMusicSyncPlaybackState()
+        } else {
+            stopMusicSyncPlaybackMonitor()
+            isMusicSyncEnabled = false
+            saveRuntimePreferences()
+            await restorePreMusicSyncWallpapers()
+        }
+    }
+
+    func restoreMusicSyncOnLaunch() async {
+        guard isMusicSyncEnabled else {
+            return
+        }
+
+        preMusicSyncConfigs = activeConfigs
+        isMusicSyncRuntimeApplied = false
+        startMusicSyncPlaybackMonitor()
+        await refreshMusicSyncPlaybackState()
+    }
+
     func isDisplayEnabled(_ displayID: DisplayID) -> Bool {
         activeConfigs[displayID] != nil
     }
@@ -517,6 +605,10 @@ final class WallpaperCoordinator {
     }
 
     func stopAll() async {
+        if isMusicSyncEnabled {
+            preMusicSyncConfigs = nil
+            isMusicSyncRuntimeApplied = false
+        }
         await runtimeController.stopAll()
         syncRuntimeState()
         updatePeriodicRuntimePolicyRefresh()
@@ -548,6 +640,12 @@ final class WallpaperCoordinator {
         saveRuntimePreferences()
 
         do {
+            if isMusicSyncEnabled {
+                await refreshActiveRuntimeConfigs()
+                lastError = nil
+                return
+            }
+
             var updatedConfigs = activeConfigs
             for (displayID, activeConfig) in activeConfigs {
                 let config = desiredConfig(displayID: displayID, content: activeConfig.content)
@@ -732,7 +830,11 @@ final class WallpaperCoordinator {
                 pauseOnBattery: pauseOnBattery,
                 pauseOnFullscreen: pauseOnFullscreen,
                 muteOnFullscreen: muteOnFullscreen,
-                applyLockScreenAutomatically: applyLockScreenAutomatically
+                applyLockScreenAutomatically: applyLockScreenAutomatically,
+                synchronizeMatchingWallpapers: synchronizeMatchingWallpapers,
+                musicSyncSource: musicSyncSource,
+                isMusicSyncEnabled: isMusicSyncEnabled,
+                musicWallpaperStyle: musicWallpaperStyle
             )
         )
     }
@@ -914,7 +1016,8 @@ final class WallpaperCoordinator {
             muted: muted,
             pauseOnBattery: pauseOnBattery,
             pauseOnFullscreen: pauseOnFullscreen,
-            muteOnFullscreen: muteOnFullscreen
+            muteOnFullscreen: muteOnFullscreen,
+            musicStyle: musicWallpaperStyle
         )
     }
 
@@ -934,10 +1037,20 @@ final class WallpaperCoordinator {
             audioOwnerID: audioOwnerID,
             fullscreenDisplayIDs: policyController.fullscreenDisplayIDs,
             pausedDisplayIDs: pausedDisplayIDs,
+            synchronizeMatchingWallpapers: synchronizeMatchingWallpapers,
             orderedDisplayIDs: displaySelection.orderedDisplayIDs
         )
         syncRuntimeState()
         updatePeriodicRuntimePolicyRefresh()
+    }
+
+    private func replaceActiveRuntimeConfigs(_ desiredConfigs: [DisplayID: WallpaperConfig]) async throws {
+        let removedDisplayIDs = Set(activeConfigs.keys).subtracting(desiredConfigs.keys)
+        for displayID in displaySelection.orderedDisplayIDs(from: removedDisplayIDs) {
+            await runtimeController.stop(displayID: displayID)
+        }
+
+        try await applyRuntimeConfigs(desiredConfigs)
     }
 
     private func refreshActiveRuntimeConfigs() async {
@@ -947,6 +1060,136 @@ final class WallpaperCoordinator {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    private func startMusicSyncPlaybackMonitor() {
+        guard musicSyncPlaybackMonitorTask == nil else {
+            return
+        }
+
+        musicSyncPlaybackMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.musicSyncPlaybackRefreshInterval)
+                guard !Task.isCancelled else {
+                    return
+                }
+                await self?.refreshMusicSyncPlaybackState()
+            }
+        }
+    }
+
+    private func stopMusicSyncPlaybackMonitor() {
+        musicSyncPlaybackMonitorTask?.cancel()
+        musicSyncPlaybackMonitorTask = nil
+    }
+
+    private func refreshMusicSyncPlaybackState() async {
+        guard isMusicSyncEnabled else {
+            return
+        }
+
+        let provider = nowPlayingProviderFactory(musicSyncSource)
+        let snapshot = await provider.currentAlbum()
+        guard snapshot?.playbackState == .playing else {
+            await restoreMusicSyncStandbyWallpapers()
+            return
+        }
+
+        guard !musicSyncRuntimeMatchesTarget else {
+            return
+        }
+
+        await applyMusicSync()
+    }
+
+    private func applyMusicSync() async {
+        refreshDisplays()
+
+        let content = WallpaperContent.musicAlbumSync(source: musicSyncSource)
+        let targetDisplayIDs = musicSyncTargetDisplayIDs()
+        guard !targetDisplayIDs.isEmpty else {
+            lastError = "Choose at least one display."
+            return
+        }
+
+        do {
+            var updatedConfigs = activeConfigs
+            for displayID in displaySelection.orderedDisplayIDs(from: targetDisplayIDs) {
+                updatedConfigs[displayID] = desiredConfig(displayID: displayID, content: content)
+                runtimeController.removePausedDisplay(displayID)
+            }
+
+            try await applyRuntimeConfigs(updatedConfigs)
+            isMusicSyncRuntimeApplied = true
+            syncApplyStatusFromActiveConfigs()
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func restorePreMusicSyncWallpapers() async {
+        await restoreMusicSyncStandbyWallpapers()
+        preMusicSyncConfigs = nil
+    }
+
+    private func restoreMusicSyncStandbyWallpapers() async {
+        let restoreConfigs = preMusicSyncConfigs ?? [:]
+        guard isMusicSyncRuntimeApplied || activeConfigs != restoreConfigs else {
+            return
+        }
+
+        do {
+            try await replaceActiveRuntimeConfigs(restoreConfigs)
+            await refreshRuntimePolicy()
+            isMusicSyncRuntimeApplied = false
+            syncApplyStatusFromActiveConfigs()
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private var musicSyncStandbyConfigs: [DisplayID: WallpaperConfig] {
+        if let preMusicSyncConfigs {
+            return preMusicSyncConfigs
+        }
+
+        return activeConfigs.filter { $0.value.content.kind != .music }
+    }
+
+    private var musicSyncRuntimeMatchesTarget: Bool {
+        let content = WallpaperContent.musicAlbumSync(source: musicSyncSource)
+        let targetDisplayIDs = musicSyncTargetDisplayIDs()
+        guard !targetDisplayIDs.isEmpty else {
+            return false
+        }
+
+        return targetDisplayIDs.allSatisfy { displayID in
+            guard let activeConfig = activeConfigs[displayID] else {
+                return false
+            }
+            return activeConfig.content == content && activeConfig.musicStyle == musicWallpaperStyle
+        }
+    }
+
+    private func musicSyncTargetDisplayIDs() -> Set<DisplayID> {
+        if let preMusicSyncConfigs, !preMusicSyncConfigs.isEmpty {
+            return Set(preMusicSyncConfigs.keys)
+        }
+
+        let nonMusicActiveDisplayIDs = Set(activeConfigs.compactMap { displayID, config in
+            config.content.kind == .music ? nil : displayID
+        })
+        if !nonMusicActiveDisplayIDs.isEmpty {
+            return nonMusicActiveDisplayIDs
+        }
+
+        if !selectedDisplayIDs.isEmpty {
+            return selectedDisplayIDs
+        }
+
+        return displays.first.map { [$0.id] } ?? []
     }
 
     private func runtimeConfig(from config: WallpaperConfig, audioOwnerID: DisplayID?) -> WallpaperConfig {

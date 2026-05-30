@@ -213,8 +213,9 @@ struct AerialLockScreenExporter {
 
     private func transcodeMOV(from asset: AVURLAsset, to outputURL: URL) async throws {
         let composition = AVMutableComposition()
+        let sourceVideoTrack = try await asset.loadTracks(withMediaType: .video).first
         guard
-            let sourceVideoTrack = asset.tracks(withMediaType: .video).first,
+            let sourceVideoTrack,
             let videoTrack = composition.addMutableTrack(
                 withMediaType: .video,
                 preferredTrackID: kCMPersistentTrackID_Invalid
@@ -223,18 +224,29 @@ struct AerialLockScreenExporter {
             throw AerialLockScreenExportError.videoExportUnavailable
         }
 
+        let duration = try await asset.load(.duration)
         try videoTrack.insertTimeRange(
-            CMTimeRange(start: .zero, duration: asset.duration),
+            CMTimeRange(start: .zero, duration: duration),
             of: sourceVideoTrack,
             at: .zero
         )
-        videoTrack.preferredTransform = sourceVideoTrack.preferredTransform
+        videoTrack.preferredTransform = try await sourceVideoTrack.load(.preferredTransform)
 
-        let compatiblePresets = AVAssetExportSession.exportPresets(compatibleWith: composition)
-        let presetName = [
+        var presetName = AVAssetExportPresetHighestQuality
+        for candidatePreset in [
             AVAssetExportPresetHEVCHighestQuality,
             AVAssetExportPresetHighestQuality
-        ].first { compatiblePresets.contains($0) } ?? AVAssetExportPresetHighestQuality
+        ] {
+            let isCompatible = await AVAssetExportSession.compatibility(
+                ofExportPreset: candidatePreset,
+                with: composition,
+                outputFileType: .mov
+            )
+            if isCompatible {
+                presetName = candidatePreset
+                break
+            }
+        }
 
         guard let export = AVAssetExportSession(asset: composition, presetName: presetName) else {
             throw AerialLockScreenExportError.videoExportUnavailable
@@ -244,15 +256,12 @@ struct AerialLockScreenExporter {
     }
 
     private func runExport(_ export: AVAssetExportSession, outputURL: URL) async throws {
-        export.outputURL = outputURL
-        export.outputFileType = .mov
         export.shouldOptimizeForNetworkUse = false
-        await export.export()
-
-        guard export.status == .completed else {
+        do {
+            try await export.export(to: outputURL, as: .mov)
+        } catch {
             try? removeExistingFile(at: outputURL)
-            let message = export.error?.localizedDescription ?? "Unknown export error"
-            throw AerialLockScreenExportError.videoExportFailed(message)
+            throw AerialLockScreenExportError.videoExportFailed(error.localizedDescription)
         }
     }
 

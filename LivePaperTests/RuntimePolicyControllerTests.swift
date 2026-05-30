@@ -23,6 +23,7 @@ final class RuntimePolicyControllerTests: XCTestCase {
         var detections: [Set<DisplayID>] = [[displayA], []]
         let controller = RuntimePolicyController(
             fullscreenDetector: { detections.removeFirst() },
+            missionControlDetector: { false },
             requiredStableFullscreenDetections: 2
         )
 
@@ -38,6 +39,7 @@ final class RuntimePolicyControllerTests: XCTestCase {
         var detections: [Set<DisplayID>] = [[displayA], [displayA]]
         let controller = RuntimePolicyController(
             fullscreenDetector: { detections.removeFirst() },
+            missionControlDetector: { false },
             requiredStableFullscreenDetections: 2
         )
 
@@ -53,6 +55,7 @@ final class RuntimePolicyControllerTests: XCTestCase {
         var detections: [Set<DisplayID>] = [[displayA], [displayA], [], []]
         let controller = RuntimePolicyController(
             fullscreenDetector: { detections.removeFirst() },
+            missionControlDetector: { false },
             requiredStableFullscreenDetections: 2
         )
 
@@ -65,5 +68,42 @@ final class RuntimePolicyControllerTests: XCTestCase {
 
         controller.refreshDetectedPolicyState()
         XCTAssertEqual(controller.fullscreenDisplayIDs, [])
+    }
+
+    func testMissionControlClearsFullscreenImmediately() {
+        let displayA = DisplayID(uuid: "display-a")
+        var missionControlDetections = [false, true]
+        let controller = RuntimePolicyController(
+            fullscreenDetector: { [displayA] },
+            missionControlDetector: { missionControlDetections.removeFirst() },
+            requiredStableFullscreenDetections: 1
+        )
+
+        controller.refreshDetectedPolicyState()
+        XCTAssertEqual(controller.fullscreenDisplayIDs, [displayA])
+
+        controller.refreshDetectedPolicyState()
+        XCTAssertTrue(controller.isMissionControlActive)
+        XCTAssertEqual(controller.fullscreenDisplayIDs, [])
+    }
+
+    func testFullscreenDetectionRestabilizesAfterMissionControlCloses() {
+        let displayA = DisplayID(uuid: "display-a")
+        var missionControlDetections = [false, true, false, false]
+        let controller = RuntimePolicyController(
+            fullscreenDetector: { [displayA] },
+            missionControlDetector: { missionControlDetections.removeFirst() },
+            requiredStableFullscreenDetections: 2
+        )
+
+        controller.refreshDetectedPolicyState()
+        controller.refreshDetectedPolicyState()
+        XCTAssertEqual(controller.fullscreenDisplayIDs, [])
+
+        controller.refreshDetectedPolicyState()
+        XCTAssertEqual(controller.fullscreenDisplayIDs, [])
+
+        controller.refreshDetectedPolicyState()
+        XCTAssertEqual(controller.fullscreenDisplayIDs, [displayA])
     }
 }

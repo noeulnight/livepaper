@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2B0000000000000000000001 /* LivePaperScreenSaverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000002 /* LivePaperScreenSaverView.swift */; };
+		2B0000000000000000000003 /* ScreenSaver.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000005 /* ScreenSaver.framework */; };
+		2B0000000000000000000006 /* LivePaperScreenSaver.saver in Embed Screen Saver */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000007 /* LivePaperScreenSaver.saver */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		1A2B3C4D5E6F708192A0B1CA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -23,12 +29,6 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXBuildFile section */
-		2B0000000000000000000001 /* LivePaperScreenSaverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000002 /* LivePaperScreenSaverView.swift */; };
-		2B0000000000000000000003 /* ScreenSaver.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000005 /* ScreenSaver.framework */; };
-		2B0000000000000000000006 /* LivePaperScreenSaver.saver in PlugIns */ = {isa = PBXBuildFile; fileRef = 2B0000000000000000000007 /* LivePaperScreenSaver.saver */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXCopyFilesBuildPhase section */
 		2B0000000000000000000008 /* Embed Screen Saver */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -36,7 +36,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				2B0000000000000000000006 /* LivePaperScreenSaver.saver in PlugIns */,
+				2B0000000000000000000006 /* LivePaperScreenSaver.saver in Embed Screen Saver */,
 			);
 			name = "Embed Screen Saver";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -156,25 +156,6 @@
 			productReference = 0FBF0BA52FC90AE700A79E58 /* LivePaper.app */;
 			productType = "com.apple.product-type.application";
 		};
-		2B0000000000000000000004 /* LivePaperScreenSaver */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 2B000000000000000000000D /* Build configuration list for PBXNativeTarget "LivePaperScreenSaver" */;
-			buildPhases = (
-				2B000000000000000000000E /* Sources */,
-				2B000000000000000000000A /* Frameworks */,
-				2B000000000000000000000F /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = LivePaperScreenSaver;
-			packageProductDependencies = (
-			);
-			productName = LivePaperScreenSaver;
-			productReference = 2B0000000000000000000007 /* LivePaperScreenSaver.saver */;
-			productType = "com.apple.product-type.bundle";
-		};
 		1A2B3C4D5E6F708192A0B1C5 /* LivePaperTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1A2B3C4D5E6F708192A0B1C6 /* Build configuration list for PBXNativeTarget "LivePaperTests" */;
@@ -197,6 +178,25 @@
 			productName = LivePaperTests;
 			productReference = 1A2B3C4D5E6F708192A0B1C2 /* LivePaperTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		2B0000000000000000000004 /* LivePaperScreenSaver */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2B000000000000000000000D /* Build configuration list for PBXNativeTarget "LivePaperScreenSaver" */;
+			buildPhases = (
+				2B000000000000000000000E /* Sources */,
+				2B000000000000000000000A /* Frameworks */,
+				2B000000000000000000000F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LivePaperScreenSaver;
+			packageProductDependencies = (
+			);
+			productName = LivePaperScreenSaver;
+			productReference = 2B0000000000000000000007 /* LivePaperScreenSaver.saver */;
+			productType = "com.apple.product-type.bundle";
 		};
 /* End PBXNativeTarget section */
 
@@ -425,7 +425,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_ENTITLEMENTS = LivePaper/LivePaperApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2B782JJGJ2;
@@ -435,6 +435,7 @@
 				ENABLE_USER_SELECTED_FILES = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "LivePaper reads the current track and album artwork from Apple Music or Spotify when Music Sync is enabled.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
@@ -458,7 +459,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_ENTITLEMENTS = LivePaper/LivePaperApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2B782JJGJ2;
@@ -468,6 +469,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "LivePaper reads the current track and album artwork from Apple Music or Spotify when Music Sync is enabled.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;

@@ -323,14 +323,12 @@ struct WallpaperDetailBackground: View {
     private var fallbackBackground: some View {
         ZStack {
             LinearGradient(
-                colors: item.kind == .video
-                    ? [Color.blue.opacity(0.34), Color.black, Color.indigo.opacity(0.28)]
-                    : [Color.green.opacity(0.32), Color.black, Color.teal.opacity(0.28)],
+                colors: fallbackGradientColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            Image(systemName: item.kind == .video ? "film.fill" : "globe")
+            Image(systemName: fallbackSystemImage)
                 .font(.system(size: 74, weight: .medium))
                 .foregroundStyle(.white.opacity(0.22))
         }
@@ -341,5 +339,27 @@ struct WallpaperDetailBackground: View {
             return nil
         }
         return NSImage(contentsOf: previewImageURL)
+    }
+
+    private var fallbackGradientColors: [Color] {
+        switch item.kind {
+        case .video:
+            return [Color.blue.opacity(0.34), Color.black, Color.indigo.opacity(0.28)]
+        case .web:
+            return [Color.green.opacity(0.32), Color.black, Color.teal.opacity(0.28)]
+        case .music:
+            return [Color.pink.opacity(0.34), Color.black, Color.purple.opacity(0.28)]
+        }
+    }
+
+    private var fallbackSystemImage: String {
+        switch item.kind {
+        case .video:
+            return "film.fill"
+        case .web:
+            return "globe"
+        case .music:
+            return "music.note"
+        }
     }
 }

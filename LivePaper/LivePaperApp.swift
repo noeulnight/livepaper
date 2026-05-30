@@ -164,13 +164,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard !didRestoreSavedWallpapers, coordinator.hasSavedWallpapers else {
+        guard !didRestoreSavedWallpapers else {
             return
         }
 
         didRestoreSavedWallpapers = true
         Task {
-            await coordinator.restoreSavedWallpapers()
+            if coordinator.hasSavedWallpapers {
+                await coordinator.restoreSavedWallpapers()
+            }
+            await coordinator.restoreMusicSyncOnLaunch()
         }
     }
 
@@ -529,7 +532,7 @@ private struct MenuBarWallpaperBackground: View {
                     endPoint: .bottomTrailing
                 )
 
-                Image(systemName: item.kind == .video ? "film.fill" : "globe")
+                Image(systemName: fallbackSystemImage(for: item.kind))
                     .font(.system(size: 92, weight: .medium))
                     .foregroundStyle(.white.opacity(0.16))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -543,6 +546,17 @@ private struct MenuBarWallpaperBackground: View {
             return nil
         }
         return NSImage(contentsOf: previewImageURL)
+    }
+
+    private func fallbackSystemImage(for kind: WallpaperContent.Kind) -> String {
+        switch kind {
+        case .video:
+            return "film.fill"
+        case .web:
+            return "globe"
+        case .music:
+            return "music.note"
+        }
     }
 }
 

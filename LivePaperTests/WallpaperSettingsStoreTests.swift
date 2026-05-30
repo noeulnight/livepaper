@@ -53,9 +53,13 @@ final class WallpaperSettingsStoreTests: XCTestCase {
         XCTAssertTrue(preferences.pauseOnFullscreen)
         XCTAssertFalse(preferences.muteOnFullscreen)
         XCTAssertTrue(preferences.applyLockScreenAutomatically)
+        XCTAssertTrue(preferences.synchronizeMatchingWallpapers)
+        XCTAssertEqual(preferences.musicSyncSource, .appleMusic)
+        XCTAssertFalse(preferences.isMusicSyncEnabled)
+        XCTAssertEqual(preferences.musicWallpaperStyle, .ambient)
     }
 
-    func testRuntimePreferencesPersistLockScreenAutoApply() {
+    func testRuntimePreferencesPersistPlaybackSettings() {
         let store = WallpaperSettingsStore(defaults: defaults)
 
         store.saveRuntimePreferences(
@@ -67,11 +71,20 @@ final class WallpaperSettingsStoreTests: XCTestCase {
                 pauseOnBattery: false,
                 pauseOnFullscreen: false,
                 muteOnFullscreen: true,
-                applyLockScreenAutomatically: false
+                applyLockScreenAutomatically: false,
+                synchronizeMatchingWallpapers: false,
+                musicSyncSource: .spotify,
+                isMusicSyncEnabled: true,
+                musicWallpaperStyle: .minimal
             )
         )
 
-        XCTAssertFalse(store.loadRuntimePreferences().applyLockScreenAutomatically)
+        let preferences = store.loadRuntimePreferences()
+        XCTAssertFalse(preferences.applyLockScreenAutomatically)
+        XCTAssertFalse(preferences.synchronizeMatchingWallpapers)
+        XCTAssertEqual(preferences.musicSyncSource, .spotify)
+        XCTAssertTrue(preferences.isMusicSyncEnabled)
+        XCTAssertEqual(preferences.musicWallpaperStyle, .minimal)
     }
 
     func testFirstLaunchIntroDefaultsToVisibleForNewUsers() {

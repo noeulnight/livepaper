@@ -15,6 +15,19 @@ final class WallpaperContentTests: XCTestCase {
             WallpaperContent.web(URL(string: "https://example.com")!).withMetadata(title: "City Loop").displayName,
             "City Loop"
         )
+        XCTAssertEqual(
+            WallpaperContent.musicAlbumSync(source: .spotify).displayName,
+            "Spotify Album Sync"
+        )
+    }
+
+    func testMusicContentCarriesSourceInGalleryID() {
+        let appleMusic = WallpaperContent.musicAlbumSync(source: .appleMusic)
+        let spotify = WallpaperContent.musicAlbumSync(source: .spotify)
+
+        XCTAssertEqual(appleMusic.kind, .music)
+        XCTAssertEqual(appleMusic.musicSource, .appleMusic)
+        XCTAssertNotEqual(appleMusic.galleryID, spotify.galleryID)
     }
 
     func testMergingMetadataKeepsExistingValuesWhenIncomingIsBlank() {

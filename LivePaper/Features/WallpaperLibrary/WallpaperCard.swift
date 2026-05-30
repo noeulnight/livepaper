@@ -67,9 +67,9 @@ struct WallpaperPreview: View {
                     .frame(width: WallpaperCardMetrics.previewWidth, height: WallpaperCardMetrics.previewHeight)
                     .clipped()
             } else {
-                Image(systemName: item.kind == .video ? "film.fill" : "globe")
+                Image(systemName: fallbackSystemImage)
                     .font(.system(size: iconSize, weight: .medium))
-                    .foregroundStyle(item.kind == .video ? .blue : .green)
+                    .foregroundStyle(fallbackColor)
             }
         }
         .frame(width: WallpaperCardMetrics.previewWidth, height: WallpaperCardMetrics.previewHeight)
@@ -79,7 +79,7 @@ struct WallpaperPreview: View {
 
     private var fallbackBackground: some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(item.kind == .video ? Color.blue.opacity(0.14) : Color.green.opacity(0.14))
+            .fill(fallbackColor.opacity(0.14))
     }
 
     private var previewImage: NSImage? {
@@ -87,5 +87,27 @@ struct WallpaperPreview: View {
             return nil
         }
         return NSImage(contentsOf: previewImageURL)
+    }
+
+    private var fallbackSystemImage: String {
+        switch item.kind {
+        case .video:
+            return "film.fill"
+        case .web:
+            return "globe"
+        case .music:
+            return "music.note"
+        }
+    }
+
+    private var fallbackColor: Color {
+        switch item.kind {
+        case .video:
+            return .blue
+        case .web:
+            return .green
+        case .music:
+            return .pink
+        }
     }
 }

@@ -62,6 +62,102 @@ struct SettingsTab: View {
                                     .frame(width: 44, alignment: .trailing)
                             }
                         }
+
+                        GlassDivider()
+
+                        GlassSettingsRow(
+                            icon: "display.2",
+                            iconColor: .cyan,
+                            title: "Sync Matching Videos",
+                            subtitle: "Keep identical video wallpapers aligned across displays."
+                        ) {
+                            Toggle("", isOn: $coordinator.synchronizeMatchingWallpapers)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+                    }
+                }
+
+                GlassSection(title: "Music Sync") {
+                    VStack(spacing: 0) {
+                        GlassSettingsRow(
+                            icon: "music.note",
+                            iconColor: .pink,
+                            title: "Album Artwork Sync",
+                            subtitle: "Temporarily replace the desktop wallpaper with the current album art."
+                        ) {
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { coordinator.isMusicSyncEnabled },
+                                    set: { isEnabled in
+                                        Task {
+                                            await coordinator.setMusicSyncEnabled(isEnabled)
+                                        }
+                                    }
+                                )
+                            )
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                        }
+
+                        GlassDivider()
+
+                        GlassSettingsRow(
+                            icon: "music.mic",
+                            iconColor: .green,
+                            title: "Music App",
+                            subtitle: "Read the current track from a local macOS music app."
+                        ) {
+                            Picker(
+                                "Music App",
+                                selection: Binding(
+                                    get: { coordinator.musicSyncSource },
+                                    set: { source in
+                                        Task {
+                                            await coordinator.setMusicSyncSource(source)
+                                        }
+                                    }
+                                )
+                            ) {
+                                ForEach(WallpaperContent.MusicSource.allCases) { source in
+                                    Text(source.title).tag(source)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .fixedSize()
+                            .frame(width: 230, alignment: .trailing)
+                        }
+
+                        GlassDivider()
+
+                        GlassSettingsRow(
+                            icon: "sparkles",
+                            iconColor: .purple,
+                            title: "Visual Style",
+                            subtitle: "Choose how album artwork becomes the desktop background."
+                        ) {
+                            Picker(
+                                "Visual Style",
+                                selection: Binding(
+                                    get: { coordinator.musicWallpaperStyle },
+                                    set: { style in
+                                        Task {
+                                            await coordinator.setMusicWallpaperStyle(style)
+                                        }
+                                    }
+                                )
+                            ) {
+                                ForEach(MusicWallpaperStyle.allCases) { style in
+                                    Text(style.title).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .fixedSize()
+                            .frame(width: 230, alignment: .trailing)
+                        }
                     }
                 }
 
@@ -240,6 +336,9 @@ struct SettingsTab: View {
             saveRuntimeSettings()
         }
         .onChange(of: coordinator.applyLockScreenAutomatically) { _, _ in
+            saveRuntimeSettings()
+        }
+        .onChange(of: coordinator.synchronizeMatchingWallpapers) { _, _ in
             saveRuntimeSettings()
         }
         .onAppear {

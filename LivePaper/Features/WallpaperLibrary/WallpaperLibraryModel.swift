@@ -99,7 +99,8 @@ final class WallpaperLibraryModel {
                 muted: config.muted,
                 pauseOnBattery: config.pauseOnBattery,
                 pauseOnFullscreen: config.pauseOnFullscreen,
-                muteOnFullscreen: config.muteOnFullscreen
+                muteOnFullscreen: config.muteOnFullscreen,
+                musicStyle: config.musicStyle
             )
             didChangeConfigs = true
         }
