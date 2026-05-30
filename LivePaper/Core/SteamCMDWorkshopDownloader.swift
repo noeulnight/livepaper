@@ -104,19 +104,7 @@ actor SteamCMDWorkshopDownloader {
 
         let terminationStream = processTerminationStream(process)
         try process.run()
-        let outputTask = Task {
-            while true {
-                let data = outputPipe.fileHandleForReading.availableData
-                if data.isEmpty {
-                    break
-                }
-
-                outputHandle.write(data)
-                if let text = String(data: data, encoding: .utf8), !text.isEmpty {
-                    await logHandler?(text)
-                }
-            }
-        }
+        let outputTask = drainOutputPipe(outputPipe, to: outputHandle, logHandler: logHandler)
 
         await logHandler?("[LivePaper] SteamCMD started.\n")
         inputPipe.fileHandleForWriting.write(
@@ -247,20 +235,53 @@ actor SteamCMDWorkshopDownloader {
         do {
             let terminationStream = processTerminationStream(process)
             try process.run()
+            let outputTask = drainOutputPipe(outputPipe, collectOutput: true)
+            let errorTask = drainOutputPipe(errorPipe)
             let terminationStatus = await processTerminationStatus(from: terminationStream, process: process)
+            outputPipe.fileHandleForWriting.closeFile()
+            errorPipe.fileHandleForWriting.closeFile()
             guard terminationStatus == 0 else {
                 return []
             }
+            let data = await outputTask.value
+            _ = await errorTask.value
+            return String(decoding: data, as: UTF8.self)
+                .split(whereSeparator: \.isNewline)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { URL(fileURLWithPath: $0) }
         } catch {
             return []
         }
+    }
 
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        return String(decoding: data, as: UTF8.self)
-            .split(whereSeparator: \.isNewline)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .map { URL(fileURLWithPath: $0) }
+    private func drainOutputPipe(
+        _ pipe: Pipe,
+        to outputHandle: FileHandle? = nil,
+        logHandler: LogHandler? = nil,
+        collectOutput: Bool = false
+    ) -> Task<Data, Never> {
+        Task.detached(priority: .utility) {
+            var collectedData = Data()
+
+            while true {
+                let data = pipe.fileHandleForReading.readData(ofLength: 32 * 1024)
+                if data.isEmpty {
+                    break
+                }
+
+                if collectOutput {
+                    collectedData.append(data)
+                }
+                outputHandle?.write(data)
+
+                if let logHandler, let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                    await logHandler(text)
+                }
+            }
+
+            return collectedData
+        }
     }
 
     private func processTerminationStream(_ process: Process) -> AsyncStream<Int32> {

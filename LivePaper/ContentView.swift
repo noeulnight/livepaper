@@ -32,6 +32,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 920, minHeight: 620)
         .preferredColorScheme(.dark)
+        .focusEffectDisabled()
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             Task {
                 await coordinator.shutdown()

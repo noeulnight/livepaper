@@ -90,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.completeIntroAndCloseIntroWindow()
                 }
             )
+            .focusEffectDisabled()
         )
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -131,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: ContentView(coordinator: coordinator))
+        window.contentView = NSHostingView(rootView: ContentView(coordinator: coordinator).focusEffectDisabled())
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -267,6 +268,7 @@ private struct MenuBarControls: View {
         .onChange(of: coordinator.displays) { _, _ in
             ensureSelectedDisplayExists()
         }
+        .focusEffectDisabled()
     }
 
     private var topBar: some View {

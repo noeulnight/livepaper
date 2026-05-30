@@ -77,10 +77,6 @@ struct DisplayCard: View {
         }
         .frame(width: DisplayCardMetrics.width, height: DisplayCardMetrics.height)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isEnabled ? Color.accentColor.opacity(0.9) : Color.white.opacity(0.14), lineWidth: isEnabled ? 1.5 : 1)
-        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { isHovered in
             if isHovered {

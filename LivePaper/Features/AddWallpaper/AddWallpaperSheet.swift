@@ -45,6 +45,7 @@ struct AddWallpaperSheet: View {
     @State private var errorMessage: String?
     @State private var errorAlert: AlertMessage?
     @State private var isSteamCMDDownloading = false
+    @State private var isSteamCMDLogPresented = false
     @State private var selectedAddMode: AddWallpaperMode = .localVideo
     @State private var isLocalVideoDropTargeted = false
     @State private var selectedLocalVideoURL: URL?
@@ -140,6 +141,14 @@ struct AddWallpaperSheet: View {
                 }
             )
         }
+        .sheet(isPresented: $isSteamCMDLogPresented) {
+            SteamCMDLogPanel(
+                coordinator: coordinator,
+                isDownloading: isSteamCMDDownloading
+            ) {
+                isSteamCMDLogPresented = false
+            }
+        }
         .onChange(of: webAddress) { _, _ in
             scheduleYouTubeMetadataExtraction()
         }
@@ -199,13 +208,9 @@ struct AddWallpaperSheet: View {
 
     private var steamWorkshopContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Workshop URL")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                TextField("https://steamcommunity.com/sharedfiles/filedetails/?id=123456789", text: $steamWorkshopAddress)
-                    .textFieldStyle(.roundedBorder)
-            }
+            steamAccountSection
+
+            steamWorkshopURLSection
 
             Button {
                 openWallpaperEngineWorkshop()
@@ -217,57 +222,93 @@ struct AddWallpaperSheet: View {
             .focusable(false)
             .help("Open the Steam Workshop page for Wallpaper Engine")
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Account Mode")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Picker("Account Mode", selection: $coordinator.steamCMDLoginMode) {
-                    ForEach(SteamCMDLoginMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-            }
-
-            if coordinator.steamCMDLoginMode == .accountSession {
-                TextField("Steam account username", text: $coordinator.steamUsername)
-                    .textFieldStyle(.roundedBorder)
-            }
-
             workshopLimitations
 
             if isSteamCMDDownloading || !coordinator.steamDownloadLog.isEmpty {
-                steamDownloadLogView
+                Button {
+                    isSteamCMDLogPresented = true
+                } label: {
+                    Label(
+                        isSteamCMDDownloading ? "Show SteamCMD Log" : "View Last SteamCMD Log",
+                        systemImage: isSteamCMDDownloading ? "arrow.down.circle" : "terminal"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .focusable(false)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(.bottom, 2)
     }
 
-    private var workshopLimitations: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Limitations", systemImage: "exclamationmark.triangle")
+    private var steamWorkshopURLSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Workshop URL", systemImage: "link")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Supports Wallpaper Engine web wallpapers and video files only.")
-                Text("Scene, application, and package-only wallpapers are not supported yet.")
-                Text("Some Workshop items require a Steam account session; anonymous download may fail.")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            TextField("https://steamcommunity.com/sharedfiles/filedetails/?id=123456789", text: $steamWorkshopAddress)
+                .textFieldStyle(.roundedBorder)
         }
-        .padding(10)
+    }
+
+    private var steamAccountSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Label("Steam Account", systemImage: "person.crop.circle")
+                    .font(.callout.weight(.semibold))
+
+                Spacer()
+            }
+
+            Picker("Account Mode", selection: $coordinator.steamCMDLoginMode) {
+                ForEach(SteamCMDLoginMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+
+            if coordinator.steamCMDLoginMode == .accountSession {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.text.rectangle")
+                        .foregroundStyle(.secondary)
+
+                    TextField("Steam username", text: $coordinator.steamUsername)
+                        .textFieldStyle(.plain)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.14))
+                }
+
+                Text("Use the same account already logged in with SteamCMD.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No account is sent to SteamCMD.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.white.opacity(0.12))
         }
+    }
+
+    private var workshopLimitations: some View {
+        Text("Supports Wallpaper Engine web wallpapers and video files. Some items may require a Steam account session.")
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var webURLContent: some View {
@@ -386,56 +427,6 @@ struct AddWallpaperSheet: View {
         }
     }
 
-    private var steamDownloadLogView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label("SteamCMD Log", systemImage: isSteamCMDDownloading ? "arrow.down.circle" : "terminal")
-                    .font(.caption.weight(.semibold))
-
-                if isSteamCMDDownloading {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.72)
-                }
-
-                Spacer()
-
-                Button {
-                    coordinator.clearSteamDownloadLog()
-                } label: {
-                    Label("Clear", systemImage: "trash")
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.borderless)
-                .focusable(false)
-                .help("Clear SteamCMD log")
-            }
-
-            ScrollViewReader { proxy in
-                ScrollView {
-                    Text(coordinator.steamDownloadLog.isEmpty ? "Waiting for SteamCMD output..." : coordinator.steamDownloadLog)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-
-                    Color.clear
-                        .frame(height: 1)
-                        .id("steam-log-bottom")
-                }
-                .frame(height: 118)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.18))
-                }
-                .onChange(of: coordinator.steamDownloadLog) { _, _ in
-                    proxy.scrollTo("steam-log-bottom", anchor: .bottom)
-                }
-            }
-        }
-    }
-
     private func chooseVideo() {
         let panel = NSOpenPanel()
         panel.title = "Choose Video"
@@ -531,6 +522,7 @@ struct AddWallpaperSheet: View {
 
         errorMessage = nil
         isSteamCMDDownloading = true
+        isSteamCMDLogPresented = true
         let error = await coordinator.downloadSteamWorkshop(url: steamWorkshopAddress)
         isSteamCMDDownloading = false
 
@@ -539,6 +531,13 @@ struct AddWallpaperSheet: View {
             return
         }
 
+        if error != nil {
+            finishImportIfNeeded()
+            return
+        }
+
+        try? await Task.sleep(for: .milliseconds(900))
+        isSteamCMDLogPresented = false
         finishImportIfNeeded()
     }
 
@@ -713,5 +712,75 @@ struct AddWallpaperSheet: View {
 
     private func steamWorkshopURLIsValid(_ rawURL: String) -> Bool {
         (try? SteamWorkshopURL(rawURL)) != nil
+    }
+}
+
+private struct SteamCMDLogPanel: View {
+    @Bindable var coordinator: WallpaperCoordinator
+    let isDownloading: Bool
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Label("SteamCMD Log", systemImage: isDownloading ? "arrow.down.circle" : "terminal")
+                    .font(.headline)
+
+                if isDownloading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.8)
+                }
+
+                Spacer()
+
+                Button {
+                    coordinator.clearSteamDownloadLog()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .help("Clear SteamCMD log")
+
+                Button {
+                    onClose()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .help("Close")
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(coordinator.steamDownloadLog.isEmpty ? "Waiting for SteamCMD output..." : coordinator.steamDownloadLog)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id("steam-log-bottom")
+                }
+                .frame(minHeight: 300)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.2))
+                }
+                .onAppear {
+                    proxy.scrollTo("steam-log-bottom", anchor: .bottom)
+                }
+                .onChange(of: coordinator.steamDownloadLog) { _, _ in
+                    proxy.scrollTo("steam-log-bottom", anchor: .bottom)
+                }
+            }
+        }
+        .padding(18)
+        .frame(width: 620, height: 420)
+        .presentationBackground(.regularMaterial)
     }
 }
