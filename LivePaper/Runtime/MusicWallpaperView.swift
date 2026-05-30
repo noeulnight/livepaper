@@ -16,7 +16,7 @@ final class MusicWallpaperView: NSView {
         }
     }
 
-    private let backgroundImageView = NSImageView()
+    private let backgroundArtworkView = MusicBackgroundArtworkView()
     private let gradientView = NSView()
     private let scrimView = NSView()
     private let coverContainerView = NSView()
@@ -40,6 +40,7 @@ final class MusicWallpaperView: NSView {
     private var progressDuration: TimeInterval?
     private var progressUpdatedAt: Date?
     private var isBackgroundSpinPaused = false
+    private var artworkTransitionID = 0
 
     init(frame frameRect: NSRect, style: MusicWallpaperStyle) {
         self.style = style
@@ -60,10 +61,9 @@ final class MusicWallpaperView: NSView {
     override func layout() {
         super.layout()
 
-        layoutBackgroundArtworkView(backgroundImageView)
+        layoutBackgroundArtworkView(backgroundArtworkView)
         subviews
-            .compactMap { $0 as? MusicArtworkTransitionImageView }
-            .filter(\.isBackgroundTransition)
+            .compactMap { $0 as? MusicBackgroundArtworkTransitionView }
             .forEach(layoutBackgroundArtworkView)
         gradientView.frame = bounds
         scrimView.frame = bounds
@@ -125,15 +125,7 @@ final class MusicWallpaperView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
 
-        backgroundImageView.imageScaling = .scaleAxesIndependently
-        backgroundImageView.wantsLayer = true
-        backgroundImageView.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        backgroundImageView.layer?.contentsGravity = .resizeAspectFill
-        if let blurFilter = CIFilter(name: "CIGaussianBlur") {
-            blurFilter.setValue(34, forKey: kCIInputRadiusKey)
-            backgroundImageView.layer?.filters = [blurFilter]
-        }
-        addSubview(backgroundImageView)
+        addSubview(backgroundArtworkView)
 
         gradientView.wantsLayer = true
         gradientView.layer?.addSublayer(gradientLayer)
@@ -200,6 +192,9 @@ final class MusicWallpaperView: NSView {
     }
 
     private func setImages(_ image: NSImage?, animated: Bool) {
+        artworkTransitionID += 1
+        let transitionID = artworkTransitionID
+        removeArtworkFadeAnimations()
         removeArtworkTransitionViews()
         let finalBackgroundAlpha = backgroundAlpha
         let finalCoverAlpha = coverAlpha
@@ -207,7 +202,7 @@ final class MusicWallpaperView: NSView {
         let fadeInDuration = Self.artworkTransitionDuration * 0.42
         let crossfadeDuration = Self.artworkTransitionDuration
         let updates = {
-            self.backgroundImageView.image = image
+            self.backgroundArtworkView.image = image
             self.coverImageView.image = image
             self.coverImageView.alphaValue = 1
             self.coverContainerView.alphaValue = image == nil && self.style != .minimal ? 0.18 : 1
@@ -223,93 +218,141 @@ final class MusicWallpaperView: NSView {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = fadeOutDuration
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                self.backgroundImageView.animator().alphaValue = 0
+                self.backgroundArtworkView.animator().alphaValue = 0
                 self.coverContainerView.animator().alphaValue = 0
             } completionHandler: {
-                updates()
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = fadeInDuration
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    self.backgroundImageView.animator().alphaValue = finalBackgroundAlpha
-                    self.coverContainerView.animator().alphaValue = finalCoverAlpha
+                MainActor.assumeIsolated {
+                    guard transitionID == self.artworkTransitionID else {
+                        return
+                    }
+
+                    updates()
+                    NSAnimationContext.runAnimationGroup { context in
+                        context.duration = fadeInDuration
+                        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                        self.backgroundArtworkView.animator().alphaValue = finalBackgroundAlpha
+                        self.coverContainerView.animator().alphaValue = finalCoverAlpha
+                    }
                 }
             }
             return
         }
 
-        let backgroundOverlay = transitionImageView(image: image, isBackground: true)
-        layoutBackgroundArtworkView(backgroundOverlay)
-        backgroundOverlay.alphaValue = 0
-        addSubview(backgroundOverlay, positioned: .above, relativeTo: backgroundImageView)
+        let spinAngle = currentBackgroundSpinAngle()
+        let backgroundOverlay = backgroundArtworkView.image.map { previousImage in
+            let overlay = MusicBackgroundArtworkTransitionView(frame: .zero)
+            overlay.image = previousImage
+            layoutBackgroundArtworkView(overlay)
+            overlay.alphaValue = finalBackgroundAlpha
+            addSubview(overlay, positioned: .above, relativeTo: backgroundArtworkView)
+            updateBackgroundSpin(
+                isActive: !isBackgroundSpinPaused,
+                on: overlay,
+                startingAngle: spinAngle
+            )
+            return overlay
+        }
 
-        let coverOverlay = transitionImageView(image: image, isBackground: false)
+        let coverOverlay = transitionImageView(image: image)
         coverOverlay.frame = coverImageView.frame
         coverOverlay.layer?.cornerRadius = coverImageView.layer?.cornerRadius ?? 0
         coverOverlay.alphaValue = 0
         coverContainerView.addSubview(coverOverlay)
 
-        backgroundImageView.alphaValue = finalBackgroundAlpha
+        backgroundArtworkView.image = image
+        backgroundArtworkView.alphaValue = finalBackgroundAlpha
+        updateBackgroundSpin(isActive: true)
         coverImageView.alphaValue = 1
         coverContainerView.alphaValue = finalCoverAlpha
         NSAnimationContext.runAnimationGroup { context in
             context.duration = crossfadeDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            backgroundOverlay.animator().alphaValue = finalBackgroundAlpha
+            backgroundOverlay?.animator().alphaValue = 0
             self.coverImageView.animator().alphaValue = 0
             coverOverlay.animator().alphaValue = 1
         } completionHandler: {
-            updates()
-            self.backgroundImageView.alphaValue = finalBackgroundAlpha
-            self.coverImageView.alphaValue = 1
-            self.coverContainerView.alphaValue = finalCoverAlpha
-            backgroundOverlay.removeFromSuperview()
-            coverOverlay.removeFromSuperview()
+            MainActor.assumeIsolated {
+                guard transitionID == self.artworkTransitionID else {
+                    backgroundOverlay?.removeFromSuperview()
+                    coverOverlay.removeFromSuperview()
+                    return
+                }
+
+                self.coverImageView.image = image
+                self.coverContainerView.alphaValue = 1
+                self.backgroundArtworkView.alphaValue = finalBackgroundAlpha
+                self.coverImageView.alphaValue = 1
+                self.coverContainerView.alphaValue = finalCoverAlpha
+                backgroundOverlay?.removeFromSuperview()
+                coverOverlay.removeFromSuperview()
+            }
+        }
+    }
+
+    private func removeArtworkFadeAnimations() {
+        [backgroundArtworkView, coverContainerView, coverImageView].forEach {
+            $0.layer?.removeAnimation(forKey: "opacity")
+            $0.layer?.removeAnimation(forKey: "alphaValue")
         }
     }
 
     private func removeArtworkTransitionViews() {
         subviews
-            .compactMap { $0 as? MusicArtworkTransitionImageView }
+            .compactMap { $0 as? MusicBackgroundArtworkTransitionView }
             .forEach { $0.removeFromSuperview() }
         coverContainerView.subviews
             .compactMap { $0 as? MusicArtworkTransitionImageView }
             .forEach { $0.removeFromSuperview() }
-        backgroundImageView.alphaValue = backgroundAlpha
+        backgroundArtworkView.alphaValue = backgroundAlpha
         coverImageView.alphaValue = 1
     }
 
-    private func transitionImageView(image: NSImage, isBackground: Bool) -> MusicArtworkTransitionImageView {
-        let imageView = MusicArtworkTransitionImageView(isBackgroundTransition: isBackground)
+    private func transitionImageView(image: NSImage) -> MusicArtworkTransitionImageView {
+        let imageView = MusicArtworkTransitionImageView()
         imageView.image = image
-        imageView.imageScaling = isBackground ? .scaleAxesIndependently : .scaleProportionallyUpOrDown
+        imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.wantsLayer = true
-        imageView.layer?.contentsGravity = isBackground ? .resizeAspectFill : .resizeAspect
-        imageView.layer?.masksToBounds = !isBackground
-        if isBackground, let blurFilter = CIFilter(name: "CIGaussianBlur") {
-            blurFilter.setValue(34, forKey: kCIInputRadiusKey)
-            imageView.layer?.filters = [blurFilter]
-        }
-        if !isBackground {
-            imageView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
-        }
+        imageView.layer?.contentsGravity = .resizeAspect
+        imageView.layer?.masksToBounds = true
+        imageView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
         return imageView
     }
 
-    private func layoutBackgroundArtworkView(_ imageView: NSImageView) {
-        let backgroundLength = hypot(bounds.width, bounds.height) + 176
+    private func layoutBackgroundArtworkView(_ view: NSView) {
+        let spinCenter = CGPoint(
+            x: bounds.minX + bounds.width * 0.16,
+            y: bounds.midY + bounds.height * 0.06
+        )
+        let farthestCornerDistance = [
+            CGPoint(x: bounds.minX, y: bounds.minY),
+            CGPoint(x: bounds.maxX, y: bounds.minY),
+            CGPoint(x: bounds.minX, y: bounds.maxY),
+            CGPoint(x: bounds.maxX, y: bounds.maxY)
+        ]
+            .map { hypot($0.x - spinCenter.x, $0.y - spinCenter.y) }
+            .max() ?? hypot(bounds.width, bounds.height)
+        let backgroundLength = farthestCornerDistance * 2 + 420
         let frame = NSRect(
-            x: bounds.midX - backgroundLength / 2,
-            y: bounds.midY - backgroundLength / 2,
+            x: spinCenter.x - backgroundLength / 2,
+            y: spinCenter.y - backgroundLength / 2,
             width: backgroundLength,
             height: backgroundLength
         )
-        imageView.frame = frame
-        imageView.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        imageView.layer?.position = CGPoint(x: frame.midX, y: frame.midY)
+        view.frame = frame
+        view.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        view.layer?.position = spinCenter
     }
 
     private func updateBackgroundSpin(isActive: Bool) {
-        guard let layer = backgroundImageView.layer else {
+        updateBackgroundSpin(isActive: isActive, on: backgroundArtworkView)
+    }
+
+    private func updateBackgroundSpin(
+        isActive: Bool,
+        on view: NSView,
+        startingAngle: Double? = nil
+    ) {
+        guard let layer = view.layer else {
             return
         }
 
@@ -323,14 +366,25 @@ final class MusicWallpaperView: NSView {
             return
         }
 
+        let angle = startingAngle ?? 0
+        layer.transform = CATransform3DMakeRotation(CGFloat(angle), 0, 0, 1)
         let animation = CABasicAnimation(keyPath: "transform.rotation.z")
-        animation.fromValue = 0
-        animation.toValue = Double.pi * 2
+        animation.fromValue = angle
+        animation.toValue = angle + Double.pi * 2
         animation.duration = Self.backgroundSpinDuration
         animation.repeatCount = .infinity
         animation.timingFunction = CAMediaTimingFunction(name: .linear)
         animation.isRemovedOnCompletion = false
         layer.add(animation, forKey: Self.backgroundSpinAnimationKey)
+    }
+
+    private func currentBackgroundSpinAngle() -> Double {
+        guard let layer = backgroundArtworkView.layer else {
+            return 0
+        }
+
+        let transform = layer.presentation()?.transform ?? layer.transform
+        return Double(atan2(transform.m12, transform.m11))
     }
 
     private func applyStyle(animated: Bool) {
@@ -347,7 +401,7 @@ final class MusicWallpaperView: NSView {
             self.vignetteLayer.startPoint = CGPoint(x: 0.5, y: 0.34)
             self.vignetteLayer.endPoint = CGPoint(x: 0.5, y: 1)
             self.scrimView.layer?.backgroundColor = NSColor.black.withAlphaComponent(self.scrimAlpha).cgColor
-            self.backgroundImageView.alphaValue = self.backgroundAlpha
+            self.backgroundArtworkView.alphaValue = self.backgroundAlpha
             self.coverContainerView.alphaValue = self.coverAlpha
             self.titleLabel.alphaValue = self.textAlpha
             self.detailLabel.alphaValue = self.textAlpha * 0.78
@@ -589,7 +643,6 @@ final class MusicWallpaperView: NSView {
         coverImageView.layer?.cornerRadius = cornerRadius
         coverContainerView.subviews
             .compactMap { $0 as? MusicArtworkTransitionImageView }
-            .filter { !$0.isBackgroundTransition }
             .forEach {
                 $0.frame = coverContainerView.bounds
                 $0.layer?.cornerRadius = cornerRadius
@@ -628,16 +681,90 @@ final class MusicWallpaperView: NSView {
     }
 }
 
-private final class MusicArtworkTransitionImageView: NSImageView {
-    let isBackgroundTransition: Bool
+private class MusicBackgroundArtworkView: NSView {
+    private static let columnCount = 3
+    private static let rowCount = 3
+    private static let tileCount = columnCount * rowCount
 
-    init(isBackgroundTransition: Bool) {
-        self.isBackgroundTransition = isBackgroundTransition
-        super.init(frame: .zero)
+    var image: NSImage? {
+        didSet {
+            tileViews.forEach { $0.image = image }
+        }
+    }
+
+    private let tileViews: [NSImageView] = (0..<tileCount).map { _ in
+        let imageView = NSImageView()
+        imageView.imageScaling = .scaleAxesIndependently
+        imageView.wantsLayer = true
+        imageView.layer?.contentsGravity = .resizeAspectFill
+        imageView.layer?.masksToBounds = true
+        imageView.layer?.backgroundColor = NSColor.black.cgColor
+        return imageView
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configure()
     }
 
     required init?(coder: NSCoder) {
-        self.isBackgroundTransition = false
         super.init(coder: coder)
+        configure()
     }
+
+    override func layout() {
+        super.layout()
+        layoutTiles()
+    }
+
+    private func configure() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.masksToBounds = false
+        if let blurFilter = CIFilter(name: "CIGaussianBlur") {
+            blurFilter.setValue(42, forKey: kCIInputRadiusKey)
+            layer?.filters = [blurFilter]
+        }
+
+        tileViews.forEach(addSubview)
+    }
+
+    private func layoutTiles() {
+        guard bounds.width > 0, bounds.height > 0 else {
+            return
+        }
+
+        let columns = Self.columnCount
+        let rows = Self.rowCount
+        let totalLength = min(bounds.width, bounds.height)
+        let origin = CGPoint(
+            x: bounds.midX - totalLength / 2,
+            y: bounds.midY - totalLength / 2
+        )
+
+        for row in 0..<rows {
+            for column in 0..<columns {
+                let index = row * columns + column
+                guard tileViews.indices.contains(index) else {
+                    continue
+                }
+
+                let minX = origin.x + totalLength * CGFloat(column) / CGFloat(columns)
+                let maxX = origin.x + totalLength * CGFloat(column + 1) / CGFloat(columns)
+                let minY = origin.y + totalLength * CGFloat(row) / CGFloat(rows)
+                let maxY = origin.y + totalLength * CGFloat(row + 1) / CGFloat(rows)
+                tileViews[index].frame = NSRect(
+                    x: minX,
+                    y: minY,
+                    width: maxX - minX,
+                    height: maxY - minY
+                )
+            }
+        }
+    }
+}
+
+private final class MusicBackgroundArtworkTransitionView: MusicBackgroundArtworkView {}
+
+private final class MusicArtworkTransitionImageView: NSImageView {
 }
