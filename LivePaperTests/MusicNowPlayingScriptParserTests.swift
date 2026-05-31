@@ -69,4 +69,60 @@ final class MusicNowPlayingScriptParserTests: XCTestCase {
         XCTAssertEqual(snapshot?.playbackPosition, 12.5)
         XCTAssertEqual(snapshot?.playbackDuration, 100)
     }
+
+    @MainActor
+    func testAppleMusicProviderExtractsArtworkOnlyWhenTrackChanges() async throws {
+        let separator = MusicNowPlayingScriptParser.separator
+        var artworkScriptCalls = 0
+        let provider = AppleScriptNowPlayingProvider(
+            source: .appleMusic,
+            scriptExecutor: { script in
+                if script.contains("raw data of artwork 1") {
+                    artworkScriptCalls += 1
+                    let path = Self.artworkPath(from: script)
+                    try? Data([1, 2, 3]).write(to: URL(fileURLWithPath: path))
+                    return path
+                }
+
+                return [
+                    "playing",
+                    "track-1",
+                    "Song",
+                    "Artist",
+                    "Album",
+                    "",
+                    "12",
+                    "120"
+                ].joined(separator: separator)
+            },
+            runningApplicationBundleIDs: {
+                [WallpaperContent.MusicSource.appleMusic.bundleIdentifier]
+            }
+        )
+
+        let firstSnapshot = await provider.currentAlbum()
+        let secondSnapshot = await provider.currentAlbum()
+
+        XCTAssertEqual(artworkScriptCalls, 1)
+        XCTAssertEqual(firstSnapshot?.artworkFileURL, secondSnapshot?.artworkFileURL)
+        XCTAssertNotNil(secondSnapshot?.artworkFileURL)
+        if let artworkFileURL = secondSnapshot?.artworkFileURL {
+            try? FileManager.default.removeItem(at: artworkFileURL)
+        }
+    }
+
+    private static func artworkPath(from script: String) -> String {
+        let marker = "set artworkPath to \""
+        guard let markerRange = script.range(of: marker) else {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("LivePaper-test-artwork")
+                .path
+        }
+
+        let remainder = script[markerRange.upperBound...]
+        guard let endIndex = remainder.firstIndex(of: "\"") else {
+            return String(remainder)
+        }
+        return String(remainder[..<endIndex])
+    }
 }

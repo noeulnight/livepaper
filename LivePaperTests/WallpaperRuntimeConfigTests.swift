@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import LivePaper
 
@@ -147,6 +148,56 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
             ),
             displayA
         )
+    }
+
+    func testSharedVideoPlaybackGroupUsesOnePlayerForMatchingDisplays() {
+        let url = URL(fileURLWithPath: "/tmp/shared.mov")
+        let group = SharedVideoPlaybackGroup(
+            key: "video:file:/tmp/shared.mov",
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url))
+        )
+        let viewA = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        let viewB = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        viewA.wantsLayer = true
+        viewB.wantsLayer = true
+
+        let attachmentA = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url)),
+            in: viewA
+        )
+        let attachmentB = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-b"), content: .video(url)),
+            in: viewB
+        )
+
+        XCTAssertTrue(attachmentA.player === attachmentB.player)
+    }
+
+    func testSharedVideoPlaybackGroupDetachesStoppedDisplayLayerOnly() {
+        let url = URL(fileURLWithPath: "/tmp/shared.mov")
+        let group = SharedVideoPlaybackGroup(
+            key: "video:file:/tmp/shared.mov",
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url))
+        )
+        let viewA = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        let viewB = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        viewA.wantsLayer = true
+        viewB.wantsLayer = true
+
+        let attachmentA = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url)),
+            in: viewA
+        )
+        let attachmentB = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-b"), content: .video(url)),
+            in: viewB
+        )
+
+        group.detach(displayID: attachmentA.displayID)
+
+        XCTAssertNil(attachmentA.player)
+        XCTAssertNotNil(attachmentB.player)
+        XCTAssertFalse(group.isEmpty)
     }
 }
 

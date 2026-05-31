@@ -32,6 +32,16 @@ struct NowPlayingAlbumSnapshot: Equatable, Sendable {
         ].joined(separator: "|")
     }
 
+    var artworkCacheKey: String {
+        [
+            source.rawValue,
+            trackID,
+            trackTitle,
+            artistName,
+            albumTitle
+        ].joined(separator: "|")
+    }
+
     var progressFraction: CGFloat? {
         guard let playbackPosition,
               let playbackDuration,
@@ -65,6 +75,21 @@ struct NowPlayingAlbumSnapshot: Equatable, Sendable {
             return String(format: "%d:%02d:%02d", hours, minutes, remainingSeconds)
         }
         return String(format: "%d:%02d", minutes, remainingSeconds)
+    }
+
+    func withArtworkFileURL(_ url: URL?) -> NowPlayingAlbumSnapshot {
+        NowPlayingAlbumSnapshot(
+            source: source,
+            playbackState: playbackState,
+            trackID: trackID,
+            trackTitle: trackTitle,
+            artistName: artistName,
+            albumTitle: albumTitle,
+            artworkURL: artworkURL,
+            artworkFileURL: url,
+            playbackPosition: playbackPosition,
+            playbackDuration: playbackDuration
+        )
     }
 }
 
@@ -145,11 +170,25 @@ enum MusicNowPlayingScriptParser {
 @MainActor
 final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
     let source: WallpaperContent.MusicSource
-    private let artworkCacheURL: URL
+    private let artworkCacheFileURL: URL
+    private let scriptExecutor: @MainActor (String) -> String?
+    private let runningApplicationBundleIDs: @MainActor () -> [String]
+    private var cachedArtworkKey: String?
+    private var cachedArtworkIsAvailable = false
 
-    init(source: WallpaperContent.MusicSource) {
+    init(
+        source: WallpaperContent.MusicSource,
+        scriptExecutor: @escaping @MainActor (String) -> String? = {
+            AppleScriptNowPlayingProvider.execute(script: $0)
+        },
+        runningApplicationBundleIDs: @escaping @MainActor () -> [String] = {
+            NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier)
+        }
+    ) {
         self.source = source
-        self.artworkCacheURL = Self.artworkCacheURL(for: source)
+        self.artworkCacheFileURL = Self.artworkCacheURL(for: source)
+        self.scriptExecutor = scriptExecutor
+        self.runningApplicationBundleIDs = runningApplicationBundleIDs
     }
 
     func currentAlbum() async -> NowPlayingAlbumSnapshot? {
@@ -157,21 +196,15 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
             return unavailableSnapshot
         }
 
-        try? FileManager.default.createDirectory(
-            at: artworkCacheURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-
         let output = execute(script: scriptSource)
-        return output.flatMap {
-            MusicNowPlayingScriptParser.parse($0, source: source, artworkFileURL: artworkCacheURL)
+        let snapshot = output.flatMap {
+            MusicNowPlayingScriptParser.parse($0, source: source, artworkFileURL: artworkCacheFileURL)
         } ?? unavailableSnapshot
+        return snapshotWithCachedArtworkIfNeeded(snapshot)
     }
 
     private var isSourceApplicationRunning: Bool {
-        NSWorkspace.shared.runningApplications.contains {
-            $0.bundleIdentifier == source.bundleIdentifier
-        }
+        runningApplicationBundleIDs().contains(source.bundleIdentifier)
     }
 
     private var unavailableSnapshot: NowPlayingAlbumSnapshot {
@@ -192,14 +225,13 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
     private var scriptSource: String {
         switch source {
         case .appleMusic:
-            return appleMusicScript
+            return appleMusicMetadataScript
         case .spotify:
             return spotifyScript
         }
     }
 
-    private var appleMusicScript: String {
-        let artworkPath = Self.appleScriptEscaped(artworkCacheURL.path)
+    private var appleMusicMetadataScript: String {
         return """
         set d to ASCII character 31
         tell application id "\(source.bundleIdentifier)"
@@ -213,23 +245,6 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
                     set trackID to database ID of currentTrack as text
                 end try
             end try
-            set artworkPath to "\(artworkPath)"
-            try
-                if (count of artworks of currentTrack) > 0 then
-                    set artworkData to raw data of artwork 1 of currentTrack
-                    set artworkFile to open for access (POSIX file artworkPath) with write permission
-                    set eof artworkFile to 0
-                    write artworkData to artworkFile
-                    close access artworkFile
-                else
-                    set artworkPath to ""
-                end if
-            on error
-                try
-                    close access (POSIX file artworkPath)
-                end try
-                set artworkPath to ""
-            end try
             set playbackPosition to 0
             set playbackDuration to 0
             try
@@ -238,7 +253,33 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
             try
                 set playbackDuration to duration of currentTrack as real
             end try
-            return (player state as text) & d & trackID & d & (name of currentTrack as text) & d & (artist of currentTrack as text) & d & (album of currentTrack as text) & d & artworkPath & d & (playbackPosition as text) & d & (playbackDuration as text)
+            return (player state as text) & d & trackID & d & (name of currentTrack as text) & d & (artist of currentTrack as text) & d & (album of currentTrack as text) & d & "" & d & (playbackPosition as text) & d & (playbackDuration as text)
+        end tell
+        """
+    }
+
+    private var appleMusicArtworkScript: String {
+        let artworkPath = Self.appleScriptEscaped(artworkCacheFileURL.path)
+        return """
+        tell application id "\(source.bundleIdentifier)"
+            if player state is stopped then return ""
+            set currentTrack to current track
+            set artworkPath to "\(artworkPath)"
+            try
+                if (count of artworks of currentTrack) > 0 then
+                    set artworkData to raw data of artwork 1 of currentTrack
+                    set artworkFile to open for access (POSIX file artworkPath) with write permission
+                    set eof artworkFile to 0
+                    write artworkData to artworkFile
+                    close access artworkFile
+                    return artworkPath
+                end if
+            on error
+                try
+                    close access (POSIX file artworkPath)
+                end try
+            end try
+            return ""
         end tell
         """
     }
@@ -263,6 +304,10 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
     }
 
     private func execute(script source: String) -> String? {
+        scriptExecutor(source)
+    }
+
+    private static func execute(script source: String) -> String? {
         var errorInfo: NSDictionary?
         guard let script = NSAppleScript(source: source),
               let result = script.executeAndReturnError(&errorInfo).stringValue,
@@ -270,6 +315,41 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
             return nil
         }
         return result
+    }
+
+    private func snapshotWithCachedArtworkIfNeeded(
+        _ snapshot: NowPlayingAlbumSnapshot
+    ) -> NowPlayingAlbumSnapshot {
+        guard source == .appleMusic,
+              snapshot.playbackState != .stopped,
+              snapshot.playbackState != .unavailable,
+              !snapshot.trackID.isEmpty else {
+            cachedArtworkKey = nil
+            cachedArtworkIsAvailable = false
+            return snapshot
+        }
+
+        let cacheKey = snapshot.artworkCacheKey
+        if cachedArtworkKey == cacheKey {
+            return cachedArtworkIsAvailable ? snapshot.withArtworkFileURL(artworkCacheFileURL) : snapshot
+        }
+
+        cachedArtworkKey = cacheKey
+        cachedArtworkIsAvailable = refreshAppleMusicArtwork()
+        return cachedArtworkIsAvailable ? snapshot.withArtworkFileURL(artworkCacheFileURL) : snapshot
+    }
+
+    private func refreshAppleMusicArtwork() -> Bool {
+        try? FileManager.default.createDirectory(
+            at: artworkCacheFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        guard execute(script: appleMusicArtworkScript)?.nilIfBlank != nil else {
+            return false
+        }
+
+        return FileManager.default.fileExists(atPath: artworkCacheFileURL.path)
     }
 
     private static func artworkCacheURL(for source: WallpaperContent.MusicSource) -> URL {

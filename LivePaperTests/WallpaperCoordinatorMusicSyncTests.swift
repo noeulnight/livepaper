@@ -165,6 +165,37 @@ final class WallpaperCoordinatorMusicSyncTests: XCTestCase {
         XCTAssertEqual(runtime.updateCalls.last?.content.url.path, "/tmp/replacement.mov")
         XCTAssertEqual(store.loadSavedConfigs()[displayID]?.content.url.path, "/tmp/replacement.mov")
     }
+
+    func testMusicSyncMonitorReusesProviderUntilSourceChanges() async throws {
+        let runtime = RecordingWallpaperRuntime()
+        var providerCreationCount = 0
+        let coordinator = WallpaperCoordinator(
+            runtime: runtime,
+            store: WallpaperSettingsStore(defaults: defaults),
+            loginItemController: LoginItemController(service: TestLoginItemService()),
+            nowPlayingProviderFactory: { source in
+                providerCreationCount += 1
+                let provider = MutableNowPlayingProvider(playbackState: .playing)
+                provider.source = source
+                return provider
+            }
+        )
+        guard let displayID = coordinator.displays.first?.id else {
+            throw XCTSkip("No display available in test environment.")
+        }
+
+        coordinator.selectedDisplayIDs = [displayID]
+        await coordinator.setMusicSyncEnabled(true)
+        await coordinator.setMusicWallpaperStyle(.focus)
+
+        XCTAssertEqual(providerCreationCount, 1)
+
+        await coordinator.setMusicSyncSource(.spotify)
+
+        XCTAssertEqual(providerCreationCount, 2)
+
+        await coordinator.setMusicSyncEnabled(false)
+    }
 }
 
 private struct TestLoginItemService: LoginItemServiceManaging {

@@ -64,4 +64,19 @@ final class WallpaperContentTests: XCTestCase {
         XCTAssertEqual(resolved.url, originalURL)
         XCTAssertEqual(resolved.readAccessURL, originalURL.deletingLastPathComponent())
     }
+
+    func testVideoSynchronizationIDCanonicalizesFileURLs() {
+        let direct = WallpaperContent.video(URL(fileURLWithPath: "/tmp/livepaper-demo.mov"))
+        let relative = WallpaperContent.video(URL(fileURLWithPath: "/tmp/../tmp/livepaper-demo.mov"))
+
+        XCTAssertEqual(direct.videoSynchronizationID, relative.videoSynchronizationID)
+    }
+
+    func testVideoSynchronizationIDIgnoresMetadata() {
+        let url = URL(fileURLWithPath: "/tmp/livepaper-demo.mov")
+        let plain = WallpaperContent.video(url)
+        let titled = WallpaperContent.video(url).withMetadata(title: "Different title")
+
+        XCTAssertEqual(plain.videoSynchronizationID, titled.videoSynchronizationID)
+    }
 }

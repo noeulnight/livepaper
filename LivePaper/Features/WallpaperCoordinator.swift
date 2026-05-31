@@ -21,6 +21,7 @@ final class WallpaperCoordinator {
     private var manuallyPausedDisplayIDs: Set<DisplayID> = []
     private var preMusicSyncConfigs: [DisplayID: WallpaperConfig]?
     private var musicSyncPlaybackMonitorTask: Task<Void, Never>?
+    private var musicSyncPlaybackProvider: NowPlayingAlbumProviding?
     private var isMusicSyncRuntimeApplied = false
 
     private(set) var lastError: String?
@@ -480,6 +481,7 @@ final class WallpaperCoordinator {
         }
 
         musicSyncSource = source
+        musicSyncPlaybackProvider = nil
         saveRuntimePreferences()
 
         if isMusicSyncEnabled {
@@ -514,6 +516,7 @@ final class WallpaperCoordinator {
             await refreshMusicSyncPlaybackState()
         } else {
             stopMusicSyncPlaybackMonitor()
+            musicSyncPlaybackProvider = nil
             isMusicSyncEnabled = false
             saveRuntimePreferences()
             await restorePreMusicSyncWallpapers()
@@ -857,7 +860,7 @@ final class WallpaperCoordinator {
             return
         }
 
-        let provider = nowPlayingProviderFactory(musicSyncSource)
+        let provider = musicSyncProvider()
         let snapshot = await provider.currentAlbum()
         guard snapshot?.playbackState == .playing else {
             await restoreMusicSyncStandbyWallpapers()
@@ -895,6 +898,17 @@ final class WallpaperCoordinator {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    private func musicSyncProvider() -> NowPlayingAlbumProviding {
+        if let musicSyncPlaybackProvider,
+           musicSyncPlaybackProvider.source == musicSyncSource {
+            return musicSyncPlaybackProvider
+        }
+
+        let provider = nowPlayingProviderFactory(musicSyncSource)
+        musicSyncPlaybackProvider = provider
+        return provider
     }
 
     private func restorePreMusicSyncWallpapers() async {
