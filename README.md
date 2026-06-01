@@ -130,6 +130,24 @@ steamcmd +quit
 
 Some Workshop items require an authenticated Steam account session. LivePaper can use SteamCMD account-session mode, but the actual Steam Guard/login flow should be completed in Terminal first.
 
+## Install From DMG
+
+Download the latest `LivePaper-<version>-<build>.dmg` from GitHub Releases, open it, and drag `LivePaper.app` into `Applications`.
+
+Current release builds are intended for personal/internal use and are not notarized. If macOS blocks the app because it was downloaded from the internet, remove the quarantine attribute after installing:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/LivePaper.app
+open /Applications/LivePaper.app
+```
+
+If you install to the user Applications folder instead:
+
+```bash
+xattr -dr com.apple.quarantine ~/Applications/LivePaper.app
+open ~/Applications/LivePaper.app
+```
+
 ## Build
 
 Build without signing for local verification:

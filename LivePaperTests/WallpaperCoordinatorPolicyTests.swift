@@ -106,6 +106,34 @@ final class WallpaperCoordinatorPolicyTests: XCTestCase {
         ])
         XCTAssertEqual(coordinator.activeContentName(for: displayID), url.lastPathComponent)
     }
+
+    func testDisplayParameterChangeReconcilesAgainAfterScreenFramesSettle() async throws {
+        let runtime = RecordingWallpaperRuntime()
+        let coordinator = WallpaperCoordinator(
+            runtime: runtime,
+            store: WallpaperSettingsStore(defaults: defaults),
+            loginItemController: LoginItemController(service: PolicyTestLoginItemService())
+        )
+        guard let displayID = coordinator.displays.first?.id else {
+            throw XCTSkip("No display available in test environment.")
+        }
+
+        coordinator.applyLockScreenAutomatically = false
+        coordinator.pauseOnBattery = false
+        coordinator.pauseOnFullscreen = false
+        coordinator.selectedDisplayIDs = [displayID]
+        let url = URL(fileURLWithPath: "/tmp/wallpaper.mov")
+        coordinator.selectVideo(url: url)
+        await coordinator.applySelectedContent()
+        runtime.resetEvents()
+
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(950))
+
+        XCTAssertGreaterThanOrEqual(runtime.events.filter { $0 == "stop:\(displayID.uuid)" }.count, 2, "\(runtime.events)")
+        XCTAssertGreaterThanOrEqual(runtime.events.filter { $0 == "update:\(url.absoluteString)" }.count, 2, "\(runtime.events)")
+        await coordinator.shutdown()
+    }
 }
 
 private struct PolicyTestLoginItemService: LoginItemServiceManaging {

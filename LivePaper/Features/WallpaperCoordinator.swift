@@ -18,6 +18,7 @@ final class WallpaperCoordinator {
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
+    private var displayReconcileTask: Task<Void, Never>?
     private var manuallyPausedDisplayIDs: Set<DisplayID> = []
     private var preMusicSyncConfigs: [DisplayID: WallpaperConfig]?
     private var musicSyncPlaybackMonitorTask: Task<Void, Never>?
@@ -136,6 +137,8 @@ final class WallpaperCoordinator {
             NotificationCenter.default.removeObserver(displayObserver)
             self.displayObserver = nil
         }
+        displayReconcileTask?.cancel()
+        displayReconcileTask = nil
         policyController.shutdown()
     }
 
@@ -1011,7 +1014,19 @@ final class WallpaperCoordinator {
         ) { [weak self] _ in
             Task { @MainActor in
                 await self?.reconcileDisplays()
+                self?.scheduleDelayedDisplayReconcile()
             }
+        }
+    }
+
+    private func scheduleDelayedDisplayReconcile() {
+        displayReconcileTask?.cancel()
+        displayReconcileTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled else {
+                return
+            }
+            await self?.reconcileDisplays()
         }
     }
 
