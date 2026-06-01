@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import XCTest
 @testable import LivePaper
 
@@ -199,6 +200,114 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
         XCTAssertNotNil(attachmentB.player)
         XCTAssertFalse(group.isEmpty)
     }
+
+    func testSharedVideoPlaybackGroupPauseKeepsLayerVisible() {
+        let url = URL(fileURLWithPath: "/tmp/shared.mov")
+        let group = SharedVideoPlaybackGroup(
+            key: "video:file:/tmp/shared.mov",
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url))
+        )
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        view.wantsLayer = true
+
+        let attachment = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url)),
+            in: view
+        )
+
+        group.pause(displayID: attachment.displayID)
+
+        XCTAssertFalse(view.layer?.sublayers?.first?.isHidden ?? true)
+        XCTAssertNotNil(attachment.player)
+    }
+
+    func testSharedVideoPlaybackGroupPauseDetachesPausedLayerWhenAnotherDisplayIsPlaying() {
+        let url = URL(fileURLWithPath: "/tmp/shared.mov")
+        let group = SharedVideoPlaybackGroup(
+            key: "video:file:/tmp/shared.mov",
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url))
+        )
+        let viewA = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        let viewB = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 180))
+        viewA.wantsLayer = true
+        viewB.wantsLayer = true
+
+        let attachmentA = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-a"), content: .video(url)),
+            in: viewA
+        )
+        let attachmentB = group.attach(
+            config: WallpaperConfig(displayID: DisplayID(uuid: "display-b"), content: .video(url)),
+            in: viewB
+        )
+
+        group.pause(displayID: attachmentA.displayID)
+
+        XCTAssertNil(attachmentA.player)
+        XCTAssertNotNil(attachmentB.player)
+        XCTAssertFalse(viewA.layer?.sublayers?.first?.isHidden ?? true)
+    }
+
+    func testScreenSessionPauseKeepsRuntimeSurfaceVisible() throws {
+        guard let screen = NSScreen.screens.first,
+              let displayID = screen.livePaperDisplayID else {
+            throw XCTSkip("No display available in test environment.")
+        }
+        let videoGroups = RecordingVideoPlaybackGroup()
+        let session = ScreenSession(
+            config: WallpaperConfig(
+                displayID: displayID,
+                content: .video(URL(fileURLWithPath: "/tmp/wallpaper.mov"))
+            ),
+            screen: screen,
+            videoGroups: videoGroups
+        )
+        defer {
+            session.stop()
+        }
+
+        session.start()
+        session.pause()
+
+        XCTAssertTrue(session.isVisible)
+        XCTAssertTrue(session.isPaused)
+        XCTAssertEqual(videoGroups.pauseCalls, [displayID])
+    }
+}
+
+@MainActor
+private final class RecordingVideoPlaybackGroup: VideoPlaybackGroupProviding {
+    private(set) var pauseCalls: [DisplayID] = []
+
+    func attachVideo(config: WallpaperConfig, in contentView: NSView) -> VideoPlaybackAttachment? {
+        contentView.wantsLayer = true
+        let layer = AVPlayerLayer()
+        contentView.layer?.addSublayer(layer)
+        return VideoPlaybackAttachment(
+            displayID: config.displayID,
+            groupKey: "test",
+            contentView: contentView,
+            layer: layer
+        )
+    }
+
+    func applyVideo(
+        config: WallpaperConfig,
+        attachment: VideoPlaybackAttachment?
+    ) -> VideoPlaybackAttachment? {
+        attachment
+    }
+
+    func pauseVideo(attachment: VideoPlaybackAttachment?) {
+        guard let attachment else {
+            return
+        }
+        pauseCalls.append(attachment.displayID)
+    }
+
+    func resumeVideo(attachment: VideoPlaybackAttachment?) {}
+
+    func detachVideo(attachment: VideoPlaybackAttachment?) {}
 }
 
 @MainActor

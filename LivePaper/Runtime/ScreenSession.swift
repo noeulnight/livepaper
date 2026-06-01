@@ -19,7 +19,7 @@ final class ScreenSession {
     private var webController: WebWallpaperController?
     private var musicController: MusicWallpaperController?
     private var accessedContentURLs: [URL: Bool] = [:]
-    private var isVisible = false
+    private(set) var isVisible = false
     private(set) var isPaused = false
 
     init(config: WallpaperConfig, screen: NSScreen, videoGroups: VideoPlaybackGroupProviding) {

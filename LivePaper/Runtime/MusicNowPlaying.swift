@@ -124,7 +124,7 @@ final class NowPlayingAlbumSubscription {
 @MainActor
 final class AppleScriptNowPlayingMonitor: NowPlayingAlbumMonitoring {
     static let shared = AppleScriptNowPlayingMonitor()
-    private static let refreshInterval: Duration = .seconds(5)
+    private static let refreshInterval: Duration = .seconds(2)
 
     private final class SourceState {
         let provider: NowPlayingAlbumProviding

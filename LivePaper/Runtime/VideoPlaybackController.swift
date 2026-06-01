@@ -86,7 +86,6 @@ final class SharedVideoPlaybackGroup {
         }
 
         member.isPaused = true
-        member.layer.isHidden = true
         members[displayID] = member
         updatePlayback()
     }
@@ -97,6 +96,7 @@ final class SharedVideoPlaybackGroup {
         }
 
         member.isPaused = false
+        member.layer.player = player
         member.layer.isHidden = false
         members[displayID] = member
         updatePlayback()
@@ -131,8 +131,15 @@ final class SharedVideoPlaybackGroup {
             .sorted { $0.key.uuid < $1.key.uuid }
 
         guard !activeMembers.isEmpty else {
+            for member in members.values {
+                member.layer.player = player
+            }
             player.pause()
             return
+        }
+
+        for member in members.values {
+            member.layer.player = member.isPaused ? nil : player
         }
 
         let audioMember = audioOwnerDisplayID
