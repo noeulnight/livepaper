@@ -111,6 +111,34 @@ final class MusicNowPlayingScriptParserTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testMonitorSharesProviderForSubscribersOfSameSource() {
+        var providerCreationCount = 0
+        let monitor = AppleScriptNowPlayingMonitor { source in
+            providerCreationCount += 1
+            return StaticNowPlayingProvider(source: source)
+        }
+
+        let firstSubscription = monitor.subscribe(source: .spotify) { _ in }
+        let secondSubscription = monitor.subscribe(source: .spotify) { _ in }
+
+        XCTAssertEqual(providerCreationCount, 1)
+        firstSubscription.cancel()
+        secondSubscription.cancel()
+    }
+
+    @MainActor
+    func testMonitorCurrentAlbumReturnsOneShotSnapshotWithoutSubscribers() async {
+        let monitor = AppleScriptNowPlayingMonitor { source in
+            StaticNowPlayingProvider(source: source)
+        }
+
+        let snapshot = await monitor.currentAlbum(source: .spotify)
+
+        XCTAssertEqual(snapshot?.source, .spotify)
+        XCTAssertEqual(snapshot?.trackTitle, "Song")
+    }
+
     private static func artworkPath(from script: String) -> String {
         let marker = "set artworkPath to \""
         guard let markerRange = script.range(of: marker) else {
@@ -124,5 +152,24 @@ final class MusicNowPlayingScriptParserTests: XCTestCase {
             return String(remainder)
         }
         return String(remainder[..<endIndex])
+    }
+}
+
+private struct StaticNowPlayingProvider: NowPlayingAlbumProviding {
+    let source: WallpaperContent.MusicSource
+
+    func currentAlbum() async -> NowPlayingAlbumSnapshot? {
+        NowPlayingAlbumSnapshot(
+            source: source,
+            playbackState: .playing,
+            trackID: "track-id",
+            trackTitle: "Song",
+            artistName: "Artist",
+            albumTitle: "Album",
+            artworkURL: nil,
+            artworkFileURL: nil,
+            playbackPosition: 12,
+            playbackDuration: 120
+        )
     }
 }

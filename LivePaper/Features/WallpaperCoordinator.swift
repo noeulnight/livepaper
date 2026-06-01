@@ -4,7 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class WallpaperCoordinator {
-    private static let musicSyncPlaybackRefreshInterval: Duration = .seconds(2)
+    private static let musicSyncPlaybackRefreshInterval: Duration = .seconds(5)
 
     private let store: WallpaperSettingsStore
     private let libraryModel: WallpaperLibraryModel
@@ -14,14 +14,13 @@ final class WallpaperCoordinator {
     private let steamController: SteamWorkshopController
     private let loginItemController: LoginItemController
     private let applyCoordinator: WallpaperApplyCoordinator
-    private let nowPlayingProviderFactory: @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding
+    private let nowPlayingMonitor: NowPlayingAlbumMonitoring
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
     private var manuallyPausedDisplayIDs: Set<DisplayID> = []
     private var preMusicSyncConfigs: [DisplayID: WallpaperConfig]?
     private var musicSyncPlaybackMonitorTask: Task<Void, Never>?
-    private var musicSyncPlaybackProvider: NowPlayingAlbumProviding?
     private var isMusicSyncRuntimeApplied = false
 
     private(set) var lastError: String?
@@ -79,9 +78,7 @@ final class WallpaperCoordinator {
         runtime: WallpaperRuntime? = nil,
         store: WallpaperSettingsStore? = nil,
         loginItemController: LoginItemController? = nil,
-        nowPlayingProviderFactory: @escaping @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding = {
-            AppleScriptNowPlayingProvider(source: $0)
-        }
+        nowPlayingMonitor: NowPlayingAlbumMonitoring? = nil
     ) {
         let resolvedStore = store ?? WallpaperSettingsStore()
         let resolvedRuntime = runtime ?? InAppWallpaperRuntime()
@@ -98,7 +95,7 @@ final class WallpaperCoordinator {
         self.steamController = SteamWorkshopController(store: resolvedStore)
         self.loginItemController = resolvedLoginItemController
         self.applyCoordinator = WallpaperApplyCoordinator()
-        self.nowPlayingProviderFactory = nowPlayingProviderFactory
+        self.nowPlayingMonitor = nowPlayingMonitor ?? AppleScriptNowPlayingMonitor.shared
         self.loginItemStatus = resolvedLoginItemController.status()
         self.applyCoordinator.statusDidChange = { [weak self] status in
             self?.applyStatus = status
@@ -481,7 +478,6 @@ final class WallpaperCoordinator {
         }
 
         musicSyncSource = source
-        musicSyncPlaybackProvider = nil
         saveRuntimePreferences()
 
         if isMusicSyncEnabled {
@@ -516,7 +512,6 @@ final class WallpaperCoordinator {
             await refreshMusicSyncPlaybackState()
         } else {
             stopMusicSyncPlaybackMonitor()
-            musicSyncPlaybackProvider = nil
             isMusicSyncEnabled = false
             saveRuntimePreferences()
             await restorePreMusicSyncWallpapers()
@@ -860,8 +855,7 @@ final class WallpaperCoordinator {
             return
         }
 
-        let provider = musicSyncProvider()
-        let snapshot = await provider.currentAlbum()
+        let snapshot = await nowPlayingMonitor.currentAlbum(source: musicSyncSource)
         guard snapshot?.playbackState == .playing else {
             await restoreMusicSyncStandbyWallpapers()
             return
@@ -898,17 +892,6 @@ final class WallpaperCoordinator {
         } catch {
             lastError = error.localizedDescription
         }
-    }
-
-    private func musicSyncProvider() -> NowPlayingAlbumProviding {
-        if let musicSyncPlaybackProvider,
-           musicSyncPlaybackProvider.source == musicSyncSource {
-            return musicSyncPlaybackProvider
-        }
-
-        let provider = nowPlayingProviderFactory(musicSyncSource)
-        musicSyncPlaybackProvider = provider
-        return provider
     }
 
     private func restorePreMusicSyncWallpapers() async {

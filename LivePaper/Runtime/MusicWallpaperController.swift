@@ -3,13 +3,15 @@ import Foundation
 
 @MainActor
 final class MusicWallpaperController {
-    private static let refreshInterval: Duration = .seconds(2)
-
     private var view: MusicWallpaperView?
-    private var provider: NowPlayingAlbumProviding?
-    private var refreshTask: Task<Void, Never>?
+    private var subscription: NowPlayingAlbumSubscription?
     private var currentIdentity: String?
     private var currentConfig: WallpaperConfig?
+    private let monitor: NowPlayingAlbumMonitoring
+
+    init(monitor: NowPlayingAlbumMonitoring? = nil) {
+        self.monitor = monitor ?? AppleScriptNowPlayingMonitor.shared
+    }
 
     func start(config: WallpaperConfig, in contentView: NSView) {
         stop()
@@ -21,9 +23,8 @@ final class MusicWallpaperController {
         currentConfig = config
 
         let source = config.content.musicSource ?? .appleMusic
-        provider = AppleScriptNowPlayingProvider(source: source)
         musicView.showPlaceholder(title: "Music Sync", subtitle: "Waiting for playback")
-        startRefreshLoop()
+        subscribe(to: source)
     }
 
     func pause() {
@@ -33,7 +34,6 @@ final class MusicWallpaperController {
     func resume() {
         view?.isHidden = false
         view?.resumeBackgroundSpin()
-        startRefreshLoop()
     }
 
     func apply(config: WallpaperConfig) {
@@ -45,43 +45,37 @@ final class MusicWallpaperController {
             return
         }
 
+        let previousStyle = currentConfig?.musicStyle
         currentConfig = config
-        view?.style = config.musicStyle
+        if previousStyle != config.musicStyle {
+            view?.style = config.musicStyle
+        }
     }
 
     func stop() {
-        refreshTask?.cancel()
-        refreshTask = nil
+        subscription?.cancel()
+        subscription = nil
         view?.removeFromSuperview()
         view = nil
-        provider = nil
         currentIdentity = nil
         currentConfig = nil
     }
 
-    private func startRefreshLoop() {
-        guard refreshTask == nil else {
-            return
-        }
-
-        refreshTask = Task { [weak self] in
-            await self?.refresh()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: Self.refreshInterval)
-                guard !Task.isCancelled else {
-                    return
-                }
-                await self?.refresh()
+    private func subscribe(to source: WallpaperContent.MusicSource) {
+        subscription?.cancel()
+        subscription = monitor.subscribe(source: source) { [weak self] snapshot in
+            Task {
+                await self?.refresh(snapshot: snapshot)
             }
         }
     }
 
-    private func refresh() async {
-        guard let provider, let view else {
+    private func refresh(snapshot: NowPlayingAlbumSnapshot?) async {
+        guard let view else {
             return
         }
 
-        guard let snapshot = await provider.currentAlbum() else {
+        guard let snapshot else {
             view.showPlaceholder(title: "Music Sync", subtitle: "Waiting for playback")
             currentIdentity = nil
             return

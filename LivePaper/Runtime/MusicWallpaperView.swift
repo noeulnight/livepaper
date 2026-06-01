@@ -9,10 +9,13 @@ final class MusicWallpaperView: NSView {
     private static let backgroundSpinDuration: CFTimeInterval = 160
     private static let artworkTransitionDuration: TimeInterval = 0.85
     private static let progressClockInterval: Duration = .milliseconds(250)
+    private static let backgroundBlurRadius: CGFloat = 42
+    private static let backgroundImageContext = CIContext(options: [.cacheIntermediates: false])
 
     var style: MusicWallpaperStyle {
         didSet {
             applyStyle(animated: true)
+            updateBackgroundSpin(isActive: currentArtwork != nil)
         }
     }
 
@@ -196,13 +199,14 @@ final class MusicWallpaperView: NSView {
         let transitionID = artworkTransitionID
         removeArtworkFadeAnimations()
         removeArtworkTransitionViews()
+        let backgroundImage = image.flatMap(blurredBackgroundImage) ?? image
         let finalBackgroundAlpha = backgroundAlpha
         let finalCoverAlpha = coverAlpha
         let fadeOutDuration = Self.artworkTransitionDuration * 0.58
         let fadeInDuration = Self.artworkTransitionDuration * 0.42
         let crossfadeDuration = Self.artworkTransitionDuration
         let updates = {
-            self.backgroundArtworkView.image = image
+            self.backgroundArtworkView.image = backgroundImage
             self.coverImageView.image = image
             self.coverImageView.alphaValue = 1
             self.coverContainerView.alphaValue = image == nil && self.style != .minimal ? 0.18 : 1
@@ -259,7 +263,7 @@ final class MusicWallpaperView: NSView {
         coverOverlay.alphaValue = 0
         coverContainerView.addSubview(coverOverlay)
 
-        backgroundArtworkView.image = image
+        backgroundArtworkView.image = backgroundImage
         backgroundArtworkView.alphaValue = finalBackgroundAlpha
         updateBackgroundSpin(isActive: true)
         coverImageView.alphaValue = 1
@@ -287,6 +291,66 @@ final class MusicWallpaperView: NSView {
                 coverOverlay.removeFromSuperview()
             }
         }
+    }
+
+    private func blurredBackgroundImage(from image: NSImage) -> NSImage? {
+        var proposedRect = NSRect(origin: .zero, size: image.size)
+        guard let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
+            return nil
+        }
+
+        let displayedLength = max(backgroundArtworkView.bounds.width, backgroundArtworkView.bounds.height, 1)
+        let renderLength = min(max(displayedLength, 512), 1536)
+        guard let tiledImage = Self.tiledBackgroundImage(from: cgImage, length: renderLength) else {
+            return nil
+        }
+
+        let source = CIImage(cgImage: tiledImage)
+        guard let blurFilter = CIFilter(name: "CIGaussianBlur") else {
+            return nil
+        }
+
+        let renderScale = renderLength / displayedLength
+        blurFilter.setValue(source.clampedToExtent(), forKey: kCIInputImageKey)
+        blurFilter.setValue(max(4, Self.backgroundBlurRadius * renderScale), forKey: kCIInputRadiusKey)
+        guard let blurredImage = blurFilter.outputImage?.cropped(to: source.extent),
+              let renderedImage = Self.backgroundImageContext.createCGImage(blurredImage, from: source.extent) else {
+            return nil
+        }
+
+        return NSImage(cgImage: renderedImage, size: NSSize(width: renderLength, height: renderLength))
+    }
+
+    private static func tiledBackgroundImage(from image: CGImage, length: CGFloat) -> CGImage? {
+        let pixelLength = max(Int(length.rounded(.up)), 1)
+        let tileLength = CGFloat(pixelLength) / 3
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: pixelLength,
+            height: pixelLength,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.interpolationQuality = .high
+        for row in 0..<3 {
+            for column in 0..<3 {
+                let rect = CGRect(
+                    x: CGFloat(column) * tileLength,
+                    y: CGFloat(row) * tileLength,
+                    width: tileLength,
+                    height: tileLength
+                )
+                context.draw(image, in: rect)
+            }
+        }
+
+        return context.makeImage()
     }
 
     private func removeArtworkFadeAnimations() {
@@ -356,7 +420,7 @@ final class MusicWallpaperView: NSView {
             return
         }
 
-        guard isActive, !isBackgroundSpinPaused else {
+        guard isActive, !isBackgroundSpinPaused, allowsBackgroundSpin else {
             layer.removeAnimation(forKey: Self.backgroundSpinAnimationKey)
             layer.transform = CATransform3DIdentity
             return
@@ -376,6 +440,10 @@ final class MusicWallpaperView: NSView {
         animation.timingFunction = CAMediaTimingFunction(name: .linear)
         animation.isRemovedOnCompletion = false
         layer.add(animation, forKey: Self.backgroundSpinAnimationKey)
+    }
+
+    private var allowsBackgroundSpin: Bool {
+        style != .minimal
     }
 
     private func currentBackgroundSpinAngle() -> Double {
@@ -682,17 +750,13 @@ final class MusicWallpaperView: NSView {
 }
 
 private class MusicBackgroundArtworkView: NSView {
-    private static let columnCount = 3
-    private static let rowCount = 3
-    private static let tileCount = columnCount * rowCount
-
     var image: NSImage? {
         didSet {
-            tileViews.forEach { $0.image = image }
+            imageView.image = image
         }
     }
 
-    private let tileViews: [NSImageView] = (0..<tileCount).map { _ in
+    private let imageView: NSImageView = {
         let imageView = NSImageView()
         imageView.imageScaling = .scaleAxesIndependently
         imageView.wantsLayer = true
@@ -700,7 +764,7 @@ private class MusicBackgroundArtworkView: NSView {
         imageView.layer?.masksToBounds = true
         imageView.layer?.backgroundColor = NSColor.black.cgColor
         return imageView
-    }
+    }()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -714,53 +778,15 @@ private class MusicBackgroundArtworkView: NSView {
 
     override func layout() {
         super.layout()
-        layoutTiles()
+        imageView.frame = bounds
     }
 
     private func configure() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.masksToBounds = false
-        if let blurFilter = CIFilter(name: "CIGaussianBlur") {
-            blurFilter.setValue(42, forKey: kCIInputRadiusKey)
-            layer?.filters = [blurFilter]
-        }
 
-        tileViews.forEach(addSubview)
-    }
-
-    private func layoutTiles() {
-        guard bounds.width > 0, bounds.height > 0 else {
-            return
-        }
-
-        let columns = Self.columnCount
-        let rows = Self.rowCount
-        let totalLength = min(bounds.width, bounds.height)
-        let origin = CGPoint(
-            x: bounds.midX - totalLength / 2,
-            y: bounds.midY - totalLength / 2
-        )
-
-        for row in 0..<rows {
-            for column in 0..<columns {
-                let index = row * columns + column
-                guard tileViews.indices.contains(index) else {
-                    continue
-                }
-
-                let minX = origin.x + totalLength * CGFloat(column) / CGFloat(columns)
-                let maxX = origin.x + totalLength * CGFloat(column + 1) / CGFloat(columns)
-                let minY = origin.y + totalLength * CGFloat(row) / CGFloat(rows)
-                let maxY = origin.y + totalLength * CGFloat(row + 1) / CGFloat(rows)
-                tileViews[index].frame = NSRect(
-                    x: minX,
-                    y: minY,
-                    width: maxX - minX,
-                    height: maxY - minY
-                )
-            }
-        }
+        addSubview(imageView)
     }
 }
 

@@ -98,6 +98,156 @@ protocol NowPlayingAlbumProviding {
     func currentAlbum() async -> NowPlayingAlbumSnapshot?
 }
 
+@MainActor
+protocol NowPlayingAlbumMonitoring: AnyObject {
+    func currentAlbum(source: WallpaperContent.MusicSource) async -> NowPlayingAlbumSnapshot?
+    func subscribe(
+        source: WallpaperContent.MusicSource,
+        handler: @escaping @MainActor (NowPlayingAlbumSnapshot?) -> Void
+    ) -> NowPlayingAlbumSubscription
+}
+
+@MainActor
+final class NowPlayingAlbumSubscription {
+    private var cancelHandler: (() -> Void)?
+
+    init(cancelHandler: @escaping () -> Void) {
+        self.cancelHandler = cancelHandler
+    }
+
+    func cancel() {
+        cancelHandler?()
+        cancelHandler = nil
+    }
+}
+
+@MainActor
+final class AppleScriptNowPlayingMonitor: NowPlayingAlbumMonitoring {
+    static let shared = AppleScriptNowPlayingMonitor()
+    private static let refreshInterval: Duration = .seconds(5)
+
+    private final class SourceState {
+        let provider: NowPlayingAlbumProviding
+        var latestSnapshot: NowPlayingAlbumSnapshot?
+        var subscribers: [UUID: @MainActor (NowPlayingAlbumSnapshot?) -> Void] = [:]
+        var refreshTask: Task<Void, Never>?
+        var isRefreshing = false
+
+        init(provider: NowPlayingAlbumProviding) {
+            self.provider = provider
+        }
+    }
+
+    private let providerFactory: @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding
+    private var states: [WallpaperContent.MusicSource: SourceState] = [:]
+
+    init(
+        providerFactory: @escaping @MainActor (WallpaperContent.MusicSource) -> NowPlayingAlbumProviding = {
+            AppleScriptNowPlayingProvider(source: $0)
+        }
+    ) {
+        self.providerFactory = providerFactory
+    }
+
+    func currentAlbum(source: WallpaperContent.MusicSource) async -> NowPlayingAlbumSnapshot? {
+        let state = state(for: source)
+        if let latestSnapshot = state.latestSnapshot {
+            return latestSnapshot
+        }
+
+        return await refresh(source: source, state: state)
+    }
+
+    func subscribe(
+        source: WallpaperContent.MusicSource,
+        handler: @escaping @MainActor (NowPlayingAlbumSnapshot?) -> Void
+    ) -> NowPlayingAlbumSubscription {
+        let state = state(for: source)
+        let id = UUID()
+        state.subscribers[id] = handler
+        startPolling(source: source, state: state)
+
+        if let latestSnapshot = state.latestSnapshot {
+            handler(latestSnapshot)
+        }
+
+        return NowPlayingAlbumSubscription { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.removeSubscriber(id, source: source)
+            }
+        }
+    }
+
+    private func state(for source: WallpaperContent.MusicSource) -> SourceState {
+        if let state = states[source] {
+            return state
+        }
+
+        let state = SourceState(provider: providerFactory(source))
+        states[source] = state
+        return state
+    }
+
+    private func startPolling(source: WallpaperContent.MusicSource, state: SourceState) {
+        guard state.refreshTask == nil else {
+            return
+        }
+
+        state.refreshTask = Task { [weak self, weak state] in
+            guard let self, let state else {
+                return
+            }
+
+            await self.refresh(source: source, state: state)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.refreshInterval)
+                guard !Task.isCancelled else {
+                    return
+                }
+                await self.refresh(source: source, state: state)
+            }
+        }
+    }
+
+    @discardableResult
+    private func refresh(source: WallpaperContent.MusicSource, state: SourceState) async -> NowPlayingAlbumSnapshot? {
+        guard !state.isRefreshing else {
+            return state.latestSnapshot
+        }
+
+        state.isRefreshing = true
+        let snapshot = await state.provider.currentAlbum()
+        state.isRefreshing = false
+        state.latestSnapshot = snapshot
+
+        for handler in state.subscribers.values {
+            handler(snapshot)
+        }
+        stopPollingIfIdle(source: source, state: state)
+        return snapshot
+    }
+
+    private func removeSubscriber(_ id: UUID, source: WallpaperContent.MusicSource) {
+        guard let state = states[source] else {
+            return
+        }
+
+        state.subscribers.removeValue(forKey: id)
+        stopPollingIfIdle(source: source, state: state)
+    }
+
+    private func stopPollingIfIdle(source: WallpaperContent.MusicSource, state: SourceState) {
+        guard state.subscribers.isEmpty else {
+            return
+        }
+
+        state.refreshTask?.cancel()
+        state.refreshTask = nil
+        state.latestSnapshot = nil
+        states.removeValue(forKey: source)
+    }
+}
+
 enum MusicNowPlayingScriptParser {
     static let separator = "\u{1F}"
 
