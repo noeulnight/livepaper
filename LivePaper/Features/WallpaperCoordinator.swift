@@ -22,6 +22,7 @@ final class WallpaperCoordinator {
     private var preMusicSyncConfigs: [DisplayID: WallpaperConfig]?
     private var musicSyncPlaybackMonitorTask: Task<Void, Never>?
     private var isMusicSyncRuntimeApplied = false
+    private var lastAutomaticMusicSyncSource: WallpaperContent.MusicSource?
 
     private(set) var lastError: String?
     private(set) var displays: [DisplayState] = []
@@ -52,7 +53,7 @@ final class WallpaperCoordinator {
     var muteOnFullscreen = false
     var applyLockScreenAutomatically = true
     var synchronizeMatchingWallpapers = true
-    var musicSyncSource: WallpaperContent.MusicSource = .appleMusic
+    var musicSyncSource: MusicSyncSourceSelection = .auto
     var musicWallpaperStyle: MusicWallpaperStyle = .ambient
     private(set) var isMusicSyncEnabled = false
 
@@ -472,7 +473,7 @@ final class WallpaperCoordinator {
         await refreshActiveRuntimeConfigs()
     }
 
-    func setMusicSyncSource(_ source: WallpaperContent.MusicSource) async {
+    func setMusicSyncSource(_ source: MusicSyncSourceSelection) async {
         guard musicSyncSource != source else {
             return
         }
@@ -855,23 +856,53 @@ final class WallpaperCoordinator {
             return
         }
 
-        let snapshot = await nowPlayingMonitor.currentAlbum(source: musicSyncSource)
-        guard snapshot?.playbackState == .playing else {
+        guard let snapshot = await currentMusicSyncSnapshot(),
+              snapshot.playbackState == .playing else {
             await restoreMusicSyncStandbyWallpapers()
             return
         }
 
-        guard !musicSyncRuntimeMatchesTarget else {
+        let source = snapshot.source
+
+        guard !musicSyncRuntimeMatchesTarget(source: source) else {
             return
         }
 
-        await applyMusicSync()
+        await applyMusicSync(source: source)
     }
 
-    private func applyMusicSync() async {
+    private func currentMusicSyncSnapshot() async -> NowPlayingAlbumSnapshot? {
+        if let forcedSource = musicSyncSource.forcedSource {
+            lastAutomaticMusicSyncSource = forcedSource
+            return await nowPlayingMonitor.currentAlbum(source: forcedSource, includeArtwork: false)
+        }
+
+        var snapshots: [NowPlayingAlbumSnapshot] = []
+        for source in WallpaperContent.MusicSource.allCases {
+            if let snapshot = await nowPlayingMonitor.currentAlbum(source: source, includeArtwork: false) {
+                snapshots.append(snapshot)
+            }
+        }
+
+        if let lastAutomaticMusicSyncSource,
+           let snapshot = snapshots.first(where: { $0.source == lastAutomaticMusicSyncSource && $0.playbackState == .playing }) {
+            return snapshot
+        }
+
+        if let snapshot = snapshots.first(where: { $0.playbackState == .playing }) {
+            lastAutomaticMusicSyncSource = snapshot.source
+            return snapshot
+        }
+
+        return lastAutomaticMusicSyncSource.flatMap { source in
+            snapshots.first { $0.source == source }
+        } ?? snapshots.first
+    }
+
+    private func applyMusicSync(source: WallpaperContent.MusicSource) async {
         refreshDisplays()
 
-        let content = WallpaperContent.musicAlbumSync(source: musicSyncSource)
+        let content = WallpaperContent.musicAlbumSync(source: source)
         let targetDisplayIDs = musicSyncTargetDisplayIDs()
         guard !targetDisplayIDs.isEmpty else {
             lastError = "Choose at least one display."
@@ -924,8 +955,8 @@ final class WallpaperCoordinator {
         return activeConfigs.filter { $0.value.content.kind != .music }
     }
 
-    private var musicSyncRuntimeMatchesTarget: Bool {
-        let content = WallpaperContent.musicAlbumSync(source: musicSyncSource)
+    private func musicSyncRuntimeMatchesTarget(source: WallpaperContent.MusicSource) -> Bool {
+        let content = WallpaperContent.musicAlbumSync(source: source)
         let targetDisplayIDs = musicSyncTargetDisplayIDs()
         guard !targetDisplayIDs.isEmpty else {
             return false

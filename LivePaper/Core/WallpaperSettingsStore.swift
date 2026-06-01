@@ -41,7 +41,7 @@ final class WallpaperSettingsStore {
             muteOnFullscreen: defaults.object(forKey: Keys.muteOnFullscreen) as? Bool ?? false,
             applyLockScreenAutomatically: defaults.object(forKey: Keys.applyLockScreenAutomatically) as? Bool ?? true,
             synchronizeMatchingWallpapers: defaults.object(forKey: Keys.synchronizeMatchingWallpapers) as? Bool ?? true,
-            musicSyncSource: WallpaperContent.MusicSource(rawValue: defaults.string(forKey: Keys.musicSyncSource) ?? "") ?? .appleMusic,
+            musicSyncSource: MusicSyncSourceSelection(rawValue: defaults.string(forKey: Keys.musicSyncSource) ?? "") ?? .auto,
             isMusicSyncEnabled: defaults.object(forKey: Keys.isMusicSyncEnabled) as? Bool ?? false,
             musicWallpaperStyle: MusicWallpaperStyle(rawValue: defaults.string(forKey: Keys.musicWallpaperStyle) ?? "") ?? .ambient
         )

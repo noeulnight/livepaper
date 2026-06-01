@@ -54,7 +54,7 @@ final class WallpaperSettingsStoreTests: XCTestCase {
         XCTAssertFalse(preferences.muteOnFullscreen)
         XCTAssertTrue(preferences.applyLockScreenAutomatically)
         XCTAssertTrue(preferences.synchronizeMatchingWallpapers)
-        XCTAssertEqual(preferences.musicSyncSource, .appleMusic)
+        XCTAssertEqual(preferences.musicSyncSource, .auto)
         XCTAssertFalse(preferences.isMusicSyncEnabled)
         XCTAssertEqual(preferences.musicWallpaperStyle, .ambient)
     }

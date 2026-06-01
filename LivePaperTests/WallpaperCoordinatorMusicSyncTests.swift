@@ -171,11 +171,39 @@ final class WallpaperCoordinatorMusicSyncTests: XCTestCase {
         await coordinator.setMusicSyncEnabled(true)
         await coordinator.setMusicWallpaperStyle(.focus)
 
-        XCTAssertTrue(monitor.currentAlbumSources.contains(.appleMusic))
+        XCTAssertEqual(Set(monitor.currentAlbumSources), Set(WallpaperContent.MusicSource.allCases))
 
         await coordinator.setMusicSyncSource(.spotify)
 
         XCTAssertEqual(monitor.currentAlbumSources.last, .spotify)
+
+        await coordinator.setMusicSyncEnabled(false)
+    }
+
+    func testMusicSyncAutoUsesThePlayingSource() async throws {
+        let runtime = RecordingWallpaperRuntime()
+        let monitor = MutableNowPlayingMonitor(
+            playbackStates: [
+                .appleMusic: .paused,
+                .spotify: .playing
+            ]
+        )
+        let coordinator = WallpaperCoordinator(
+            runtime: runtime,
+            store: WallpaperSettingsStore(defaults: defaults),
+            loginItemController: LoginItemController(service: TestLoginItemService()),
+            nowPlayingMonitor: monitor
+        )
+        guard let displayID = coordinator.displays.first?.id else {
+            throw XCTSkip("No display available in test environment.")
+        }
+
+        coordinator.selectedDisplayIDs = [displayID]
+        await coordinator.setMusicSyncEnabled(true)
+
+        XCTAssertEqual(runtime.updateCalls.last?.content.kind, .music)
+        XCTAssertEqual(runtime.updateCalls.last?.content.musicSource, .spotify)
+        XCTAssertEqual(monitor.currentAlbumArtworkRequests, [])
 
         await coordinator.setMusicSyncEnabled(false)
     }
@@ -189,14 +217,32 @@ private struct TestLoginItemService: LoginItemServiceManaging {
 
 private final class MutableNowPlayingMonitor: NowPlayingAlbumMonitoring {
     var playbackState: MusicPlaybackState
+    var playbackStates: [WallpaperContent.MusicSource: MusicPlaybackState]
     private(set) var currentAlbumSources: [WallpaperContent.MusicSource] = []
+    private(set) var currentAlbumArtworkRequests: [WallpaperContent.MusicSource] = []
 
     init(playbackState: MusicPlaybackState) {
         self.playbackState = playbackState
+        self.playbackStates = [:]
+    }
+
+    init(playbackStates: [WallpaperContent.MusicSource: MusicPlaybackState]) {
+        self.playbackState = .unavailable
+        self.playbackStates = playbackStates
     }
 
     func currentAlbum(source: WallpaperContent.MusicSource) async -> NowPlayingAlbumSnapshot? {
+        await currentAlbum(source: source, includeArtwork: true)
+    }
+
+    func currentAlbum(
+        source: WallpaperContent.MusicSource,
+        includeArtwork: Bool
+    ) async -> NowPlayingAlbumSnapshot? {
         currentAlbumSources.append(source)
+        if includeArtwork {
+            currentAlbumArtworkRequests.append(source)
+        }
         return snapshot(source: source)
     }
 
@@ -211,7 +257,7 @@ private final class MutableNowPlayingMonitor: NowPlayingAlbumMonitoring {
     private func snapshot(source: WallpaperContent.MusicSource) -> NowPlayingAlbumSnapshot {
         NowPlayingAlbumSnapshot(
             source: source,
-            playbackState: playbackState,
+            playbackState: playbackStates[source] ?? playbackState,
             trackID: "track-id",
             trackTitle: "Track",
             artistName: "Artist",

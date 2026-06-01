@@ -96,11 +96,19 @@ struct NowPlayingAlbumSnapshot: Equatable, Sendable {
 protocol NowPlayingAlbumProviding {
     var source: WallpaperContent.MusicSource { get }
     func currentAlbum() async -> NowPlayingAlbumSnapshot?
+    func currentAlbum(includeArtwork: Bool) async -> NowPlayingAlbumSnapshot?
+}
+
+extension NowPlayingAlbumProviding {
+    func currentAlbum(includeArtwork: Bool) async -> NowPlayingAlbumSnapshot? {
+        await currentAlbum()
+    }
 }
 
 @MainActor
 protocol NowPlayingAlbumMonitoring: AnyObject {
     func currentAlbum(source: WallpaperContent.MusicSource) async -> NowPlayingAlbumSnapshot?
+    func currentAlbum(source: WallpaperContent.MusicSource, includeArtwork: Bool) async -> NowPlayingAlbumSnapshot?
     func subscribe(
         source: WallpaperContent.MusicSource,
         handler: @escaping @MainActor (NowPlayingAlbumSnapshot?) -> Void
@@ -150,12 +158,19 @@ final class AppleScriptNowPlayingMonitor: NowPlayingAlbumMonitoring {
     }
 
     func currentAlbum(source: WallpaperContent.MusicSource) async -> NowPlayingAlbumSnapshot? {
+        await currentAlbum(source: source, includeArtwork: true)
+    }
+
+    func currentAlbum(
+        source: WallpaperContent.MusicSource,
+        includeArtwork: Bool
+    ) async -> NowPlayingAlbumSnapshot? {
         let state = state(for: source)
-        if let latestSnapshot = state.latestSnapshot {
+        if includeArtwork, let latestSnapshot = state.latestSnapshot {
             return latestSnapshot
         }
 
-        return await refresh(source: source, state: state)
+        return await refresh(source: source, state: state, includeArtwork: includeArtwork)
     }
 
     func subscribe(
@@ -198,30 +213,36 @@ final class AppleScriptNowPlayingMonitor: NowPlayingAlbumMonitoring {
                 return
             }
 
-            await self.refresh(source: source, state: state)
+            await self.refresh(source: source, state: state, includeArtwork: true)
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.refreshInterval)
                 guard !Task.isCancelled else {
                     return
                 }
-                await self.refresh(source: source, state: state)
+                await self.refresh(source: source, state: state, includeArtwork: true)
             }
         }
     }
 
     @discardableResult
-    private func refresh(source: WallpaperContent.MusicSource, state: SourceState) async -> NowPlayingAlbumSnapshot? {
+    private func refresh(
+        source: WallpaperContent.MusicSource,
+        state: SourceState,
+        includeArtwork: Bool
+    ) async -> NowPlayingAlbumSnapshot? {
         guard !state.isRefreshing else {
             return state.latestSnapshot
         }
 
         state.isRefreshing = true
-        let snapshot = await state.provider.currentAlbum()
+        let snapshot = await state.provider.currentAlbum(includeArtwork: includeArtwork)
         state.isRefreshing = false
-        state.latestSnapshot = snapshot
+        if includeArtwork {
+            state.latestSnapshot = snapshot
 
-        for handler in state.subscribers.values {
-            handler(snapshot)
+            for handler in state.subscribers.values {
+                handler(snapshot)
+            }
         }
         stopPollingIfIdle(source: source, state: state)
         return snapshot
@@ -342,6 +363,10 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
     }
 
     func currentAlbum() async -> NowPlayingAlbumSnapshot? {
+        await currentAlbum(includeArtwork: true)
+    }
+
+    func currentAlbum(includeArtwork: Bool) async -> NowPlayingAlbumSnapshot? {
         guard isSourceApplicationRunning else {
             return unavailableSnapshot
         }
@@ -350,6 +375,9 @@ final class AppleScriptNowPlayingProvider: NowPlayingAlbumProviding {
         let snapshot = output.flatMap {
             MusicNowPlayingScriptParser.parse($0, source: source, artworkFileURL: artworkCacheFileURL)
         } ?? unavailableSnapshot
+        guard includeArtwork else {
+            return snapshot
+        }
         return snapshotWithCachedArtworkIfNeeded(snapshot)
     }
 

@@ -88,7 +88,7 @@ struct RuntimePreferences: Equatable, Sendable {
     var muteOnFullscreen: Bool
     var applyLockScreenAutomatically: Bool
     var synchronizeMatchingWallpapers: Bool
-    var musicSyncSource: WallpaperContent.MusicSource
+    var musicSyncSource: MusicSyncSourceSelection
     var isMusicSyncEnabled: Bool
     var musicWallpaperStyle: MusicWallpaperStyle
 }

@@ -120,14 +120,14 @@ struct SettingsTab: View {
                                     }
                                 )
                             ) {
-                                ForEach(WallpaperContent.MusicSource.allCases) { source in
+                                ForEach(MusicSyncSourceSelection.allCases) { source in
                                     Text(source.title).tag(source)
                                 }
                             }
                             .labelsHidden()
                             .pickerStyle(.segmented)
                             .fixedSize()
-                            .frame(width: 230, alignment: .trailing)
+                            .frame(width: 300, alignment: .trailing)
                         }
 
                         GlassDivider()
