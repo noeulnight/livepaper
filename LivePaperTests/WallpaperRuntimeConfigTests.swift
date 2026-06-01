@@ -244,4 +244,8 @@ final class RecordingWallpaperRuntime: WallpaperRuntime {
     }
 
     func resume(displayID: DisplayID) async {}
+
+    func resetEvents() {
+        events.removeAll()
+    }
 }

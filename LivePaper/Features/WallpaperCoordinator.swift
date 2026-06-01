@@ -1012,8 +1012,25 @@ final class WallpaperCoordinator {
         syncRuntimeState()
 
         await restoreSavedWallpapersForReappearedDisplays()
-        await refreshActiveRuntimeConfigs()
+        await restartActiveRuntimeConfigsAfterDisplayChange()
         await refreshRuntimePolicy()
+    }
+
+    private func restartActiveRuntimeConfigsAfterDisplayChange() async {
+        let restartConfigs = activeConfigs
+        guard !restartConfigs.isEmpty else {
+            return
+        }
+
+        do {
+            for displayID in displaySelection.orderedDisplayIDs(from: Set(restartConfigs.keys)) {
+                await runtimeController.stop(displayID: displayID)
+            }
+            try await applyRuntimeConfigs(restartConfigs)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     private func restoreSavedWallpapersForReappearedDisplays() async {
