@@ -139,7 +139,8 @@ final class SharedVideoPlaybackGroup {
         }
 
         for member in members.values {
-            member.layer.player = member.isPaused ? nil : player
+            member.layer.player = player
+            member.layer.isHidden = false
         }
 
         let audioMember = audioOwnerDisplayID

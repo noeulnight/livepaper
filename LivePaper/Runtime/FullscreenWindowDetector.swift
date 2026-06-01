@@ -80,12 +80,30 @@ enum FullscreenWindowDetector {
             }
 
             let displayID = CGDirectDisplayID(number.uint32Value)
+            let displayBounds = CGDisplayBounds(displayID)
             return DisplayInfo(
                 id: id,
-                bounds: CGDisplayBounds(displayID),
-                visibleFrame: screen.visibleFrame
+                bounds: displayBounds,
+                visibleFrame: visibleFrameInDisplayCoordinates(
+                    screenFrame: screen.frame,
+                    visibleFrame: screen.visibleFrame,
+                    displayBounds: displayBounds
+                )
             )
         }
+    }
+
+    static func visibleFrameInDisplayCoordinates(
+        screenFrame: CGRect,
+        visibleFrame: CGRect,
+        displayBounds: CGRect
+    ) -> CGRect {
+        CGRect(
+            x: displayBounds.minX + (visibleFrame.minX - screenFrame.minX),
+            y: displayBounds.minY + (screenFrame.maxY - visibleFrame.maxY),
+            width: visibleFrame.width,
+            height: visibleFrame.height
+        )
     }
 
     static func isCandidateFullscreenWindow(

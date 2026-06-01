@@ -30,6 +30,21 @@ final class FullscreenWindowDetectorTests: XCTestCase {
         )
     }
 
+    func testConvertsVisibleFrameForDisplayBelowMainScreen() {
+        let screenFrame = CGRect(x: 122, y: -1329, width: 2056, height: 1329)
+        let visibleFrame = CGRect(x: 122, y: -1329, width: 2056, height: 1291)
+        let displayBounds = CGRect(x: 122, y: 1440, width: 2056, height: 1329)
+
+        XCTAssertEqual(
+            FullscreenWindowDetector.visibleFrameInDisplayCoordinates(
+                screenFrame: screenFrame,
+                visibleFrame: visibleFrame,
+                displayBounds: displayBounds
+            ),
+            CGRect(x: 122, y: 1478, width: 2056, height: 1291)
+        )
+    }
+
     func testDoesNotCoverWhenWindowIsSmallerThanVisibleFrameThreshold() {
         let windowBounds = CGRect(x: 0, y: 25, width: 1100, height: 700)
 

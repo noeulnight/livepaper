@@ -221,7 +221,7 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
         XCTAssertNotNil(attachment.player)
     }
 
-    func testSharedVideoPlaybackGroupPauseDetachesPausedLayerWhenAnotherDisplayIsPlaying() {
+    func testSharedVideoPlaybackGroupPauseKeepsPausedLayerAttachedWhenAnotherDisplayIsPlaying() {
         let url = URL(fileURLWithPath: "/tmp/shared.mov")
         let group = SharedVideoPlaybackGroup(
             key: "video:file:/tmp/shared.mov",
@@ -243,9 +243,26 @@ final class WallpaperRuntimeConfigTests: XCTestCase {
 
         group.pause(displayID: attachmentA.displayID)
 
-        XCTAssertNil(attachmentA.player)
+        XCTAssertNotNil(attachmentA.player)
         XCTAssertNotNil(attachmentB.player)
         XCTAssertFalse(viewA.layer?.sublayers?.first?.isHidden ?? true)
+    }
+
+    func testWallpaperWindowUsesTransparentSurfaceBeforeFirstVideoFrame() throws {
+        guard let screen = NSScreen.screens.first else {
+            throw XCTSkip("No display available in test environment.")
+        }
+
+        let wallpaperWindow = WallpaperWindow(screen: screen)
+        defer {
+            wallpaperWindow.close()
+        }
+
+        let window = try XCTUnwrap(
+            Mirror(reflecting: wallpaperWindow).children.first { $0.label == "window" }?.value as? NSWindow
+        )
+        XCTAssertFalse(window.isOpaque)
+        XCTAssertEqual(window.backgroundColor, .clear)
     }
 
     func testScreenSessionPauseKeepsRuntimeSurfaceVisible() throws {

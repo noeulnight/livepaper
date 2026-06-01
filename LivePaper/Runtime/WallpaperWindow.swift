@@ -17,13 +17,14 @@ final class WallpaperWindow {
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         window.ignoresMouseEvents = true
         window.hasShadow = false
-        window.isOpaque = true
-        window.backgroundColor = .black
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
 
         let contentView = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
         contentView.wantsLayer = true
         contentView.layer = CALayer()
+        contentView.layer?.backgroundColor = NSColor.clear.cgColor
         window.contentView = contentView
         window.setFrame(screen.frame, display: true)
 
