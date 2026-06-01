@@ -1,10 +1,3 @@
-//
-//  LivePaperApp.swift
-//  LivePaper
-//
-//  Created by Limtaehyun on 5/29/26.
-//
-
 import SwiftUI
 import AppKit
 

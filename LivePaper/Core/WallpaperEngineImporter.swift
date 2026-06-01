@@ -147,6 +147,10 @@ struct WallpaperEngineImporter {
         let wallpaperFileURL = folderURL.appendingPathComponent(project.normalizedFile)
         let metadata = metadata(for: project, folderURL: folderURL, workshopID: workshopID)
 
+        guard type == "web" || type == "video" else {
+            throw WallpaperEngineImportError.unsupportedWallpaperType(type)
+        }
+
         guard fileManager.fileExists(atPath: wallpaperFileURL.path) else {
             throw WallpaperEngineImportError.missingWallpaperFile(wallpaperFileURL)
         }

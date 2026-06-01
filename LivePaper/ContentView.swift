@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  LivePaper
-//
-//  Created by Limtaehyun on 5/29/26.
-//
-
 import AppKit
 import SwiftUI
 

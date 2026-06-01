@@ -697,8 +697,8 @@ final class MusicWallpaperView: NSView {
             )
             let textX = coverContainerView.frame.maxX + 24
             let textWidth = max(220, min(labelWidth, safeBounds.maxX - textX))
-            titleLabel.frame = NSRect(x: textX, y: safeBounds.minY + 74, width: textWidth, height: 30)
-            detailLabel.frame = NSRect(x: textX, y: safeBounds.minY + 46, width: textWidth, height: 22)
+            titleLabel.frame = NSRect(x: textX, y: safeBounds.minY + 68, width: textWidth, height: 42)
+            detailLabel.frame = NSRect(x: textX, y: safeBounds.minY + 44, width: textWidth, height: 26)
             layoutProgressRow(x: textX, y: safeBounds.minY + 30, width: min(textWidth, 330))
             statusLabel.frame = NSRect(x: textX, y: safeBounds.minY + 4, width: textWidth, height: 20)
         }
@@ -718,8 +718,8 @@ final class MusicWallpaperView: NSView {
     }
 
     private func layoutCenteredLabels(width: CGFloat, topY: CGFloat) {
-        titleLabel.frame = NSRect(x: bounds.midX - width / 2, y: topY, width: width, height: 34)
-        detailLabel.frame = NSRect(x: bounds.midX - width / 2, y: titleLabel.frame.minY - 30, width: width, height: 24)
+        titleLabel.frame = NSRect(x: bounds.midX - width / 2, y: topY - 4, width: width, height: 42)
+        detailLabel.frame = NSRect(x: bounds.midX - width / 2, y: titleLabel.frame.minY - 30, width: width, height: 26)
         statusLabel.frame = NSRect(x: bounds.midX - width / 2, y: detailLabel.frame.minY - 28, width: width, height: 22)
     }
 
