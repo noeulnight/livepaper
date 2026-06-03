@@ -161,6 +161,8 @@ struct SettingsTab: View {
                     }
                 }
 
+                WallpaperProfilesSettingsSection(coordinator: coordinator)
+
                 GlassSection(title: "Power") {
                     VStack(spacing: 0) {
                         GlassSettingsRow(
@@ -360,6 +362,135 @@ struct SettingsTab: View {
     private func saveRuntimeSettings() {
         Task {
             await coordinator.updateRuntimePreferences()
+        }
+    }
+}
+
+struct WallpaperProfilesSettingsSection: View {
+    @Bindable var coordinator: WallpaperCoordinator
+
+    @State private var profileName = ""
+    @State private var selectedGalleryItemID: WallpaperGalleryItem.ID = ""
+    @State private var restoresPreviousWallpapers = true
+
+    var body: some View {
+        GlassSection(title: "Wallpaper Profiles") {
+            VStack(spacing: 0) {
+                GlassSettingsRow(
+                    icon: "textformat",
+                    iconColor: .blue,
+                    title: "Profile Name",
+                    subtitle: "Used by the LivePaper shortcut actions."
+                ) {
+                    TextField("e.g. Work", text: $profileName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 220)
+                }
+
+                GlassDivider()
+
+                GlassSettingsRow(
+                    icon: "photo.on.rectangle.angled",
+                    iconColor: .teal,
+                    title: "Wallpaper",
+                    subtitle: "Choose which library wallpaper this profile applies."
+                ) {
+                    if coordinator.galleryItems.isEmpty {
+                        Text("Add a wallpaper first")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.5))
+                    } else {
+                        Picker("Wallpaper", selection: $selectedGalleryItemID) {
+                            ForEach(coordinator.galleryItems) { item in
+                                Text(item.title).tag(item.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
+                    }
+                }
+
+                GlassDivider()
+
+                GlassSettingsRow(
+                    icon: "arrow.uturn.backward",
+                    iconColor: .orange,
+                    title: "Restore Previous",
+                    subtitle: "Bring back the previous wallpapers when the restore shortcut runs."
+                ) {
+                    Toggle("", isOn: $restoresPreviousWallpapers)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                }
+
+                GlassDivider()
+
+                GlassSettingsRow(
+                    icon: "plus.circle.fill",
+                    iconColor: .green,
+                    title: "Create Profile",
+                    subtitle: "Save this wallpaper profile for Shortcuts."
+                ) {
+                    Button("Create") {
+                        createProfile()
+                    }
+                    .buttonStyle(GlassProminentButtonStyle())
+                    .disabled(profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.galleryItems.isEmpty)
+                    .focusable(false)
+                }
+
+                if !coordinator.wallpaperProfiles.isEmpty {
+                    GlassDivider()
+
+                    ForEach(Array(coordinator.wallpaperProfiles.enumerated()), id: \.element.id) { index, profile in
+                        if index > 0 {
+                            GlassDivider()
+                        }
+                        GlassSettingsRow(
+                            icon: "rectangle.stack.fill",
+                            iconColor: .purple,
+                            title: profile.name,
+                            subtitle: profileSubtitle(for: profile)
+                        ) {
+                            Button(role: .destructive) {
+                                coordinator.deleteWallpaperProfile(id: profile.id)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(GlassSecondaryButtonStyle())
+                            .focusable(false)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            coordinator.refreshWallpaperProfiles()
+            syncSelectedGalleryItem()
+        }
+        .onChange(of: coordinator.galleryItems) { _, _ in
+            syncSelectedGalleryItem()
+        }
+    }
+
+    private func profileSubtitle(for profile: WallpaperProfile) -> String {
+        let restore = profile.restoresPreviousWallpapers ? "Restores previous" : "Keeps wallpaper"
+        return "\(profile.wallpaperTitle) · \(restore)"
+    }
+
+    private func createProfile() {
+        coordinator.createWallpaperProfile(
+            name: profileName,
+            galleryItemID: selectedGalleryItemID,
+            restoresPreviousWallpapers: restoresPreviousWallpapers
+        )
+        profileName = ""
+    }
+
+    private func syncSelectedGalleryItem() {
+        let availableIDs = coordinator.galleryItems.map(\.id)
+        if !availableIDs.contains(selectedGalleryItemID), let first = availableIDs.first {
+            selectedGalleryItemID = first
         }
     }
 }

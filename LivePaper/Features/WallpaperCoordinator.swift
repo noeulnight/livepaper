@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import Observation
 
 @MainActor
@@ -15,6 +16,7 @@ final class WallpaperCoordinator {
     private let loginItemController: LoginItemController
     private let applyCoordinator: WallpaperApplyCoordinator
     private let nowPlayingMonitor: NowPlayingAlbumMonitoring
+    private let wallpaperProfileController: WallpaperProfileController
 
     private var savedConfigs: [DisplayID: SavedWallpaperConfig]
     private var displayObserver: NSObjectProtocol?
@@ -39,6 +41,7 @@ final class WallpaperCoordinator {
     private(set) var shouldShowFirstLaunchIntro = false
     private(set) var isScreenSaverInstalled = false
     private(set) var applyStatus = WallpaperApplyStatus.idle
+    private(set) var wallpaperProfiles: [WallpaperProfile] = []
 
     var selectedDisplayIDs: Set<DisplayID> = [] {
         didSet {
@@ -98,6 +101,7 @@ final class WallpaperCoordinator {
         self.loginItemController = resolvedLoginItemController
         self.applyCoordinator = WallpaperApplyCoordinator()
         self.nowPlayingMonitor = nowPlayingMonitor ?? AppleScriptNowPlayingMonitor.shared
+        self.wallpaperProfileController = WallpaperProfileController()
         self.loginItemStatus = resolvedLoginItemController.status()
         self.applyCoordinator.statusDidChange = { [weak self] status in
             self?.applyStatus = status
@@ -124,12 +128,17 @@ final class WallpaperCoordinator {
             hasExistingWallpapers: !galleryItems.isEmpty || !loadedSavedConfigs.isEmpty
         )
         syncSteamState()
+        syncWallpaperProfiles()
         refreshDisplays()
         observeDisplayChanges()
         observeSystemPolicyChanges()
+        wallpaperProfileController.startMonitoring { [weak self] activation in
+            await self?.handleWallpaperProfileActivation(activation)
+        }
     }
 
     func shutdown() async {
+        wallpaperProfileController.stopMonitoring()
         stopMusicSyncPlaybackMonitor()
         await stopAll()
 
@@ -312,6 +321,43 @@ final class WallpaperCoordinator {
 
     func openScreenSaverSettings() {
         applyCoordinator.openScreenSaverSettings()
+    }
+
+    // MARK: - Wallpaper Profiles
+
+    func refreshWallpaperProfiles() {
+        syncWallpaperProfiles()
+    }
+
+    func createWallpaperProfile(
+        name: String,
+        galleryItemID: WallpaperGalleryItem.ID,
+        restoresPreviousWallpapers: Bool
+    ) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            lastError = "Enter a profile name."
+            return
+        }
+        guard let item = galleryItems.first(where: { $0.id == galleryItemID }) else {
+            lastError = "Choose a wallpaper for the profile."
+            return
+        }
+
+        wallpaperProfileController.createProfile(
+            name: trimmedName,
+            galleryItemID: galleryItemID,
+            wallpaperTitle: item.title,
+            restoresPreviousWallpapers: restoresPreviousWallpapers
+        )
+        syncWallpaperProfiles()
+        lastError = nil
+    }
+
+    func deleteWallpaperProfile(id: WallpaperProfile.ID) {
+        wallpaperProfileController.deleteProfile(id: id)
+        syncWallpaperProfiles()
+        lastError = nil
     }
 
     func applySelectedContent() async {
@@ -698,6 +744,77 @@ final class WallpaperCoordinator {
 
     private func syncSteamState() {
         steamDownloadLog = steamController.steamDownloadLog
+    }
+
+    private func syncWallpaperProfiles() {
+        let validGalleryItemIDs = Set(galleryItems.map(\.id))
+        wallpaperProfiles = wallpaperProfileController.refreshProfiles(validGalleryItemIDs: validGalleryItemIDs)
+    }
+
+    private func handleWallpaperProfileActivation(_ activation: WallpaperProfileActivation) async {
+        if let profileID = activation.profileID {
+            await applyWallpaperProfile(id: profileID)
+        } else {
+            await restorePreviousProfileWallpapers()
+        }
+    }
+
+    private func applyWallpaperProfile(id: WallpaperProfile.ID) async {
+        guard let profile = wallpaperProfileController.profile(id: id) else {
+            return
+        }
+        guard let content = libraryModel.content(forGalleryItemID: profile.galleryItemID, savedConfigs: savedConfigs) else {
+            lastError = "This profile's wallpaper is no longer in the library."
+            return
+        }
+
+        refreshDisplays()
+        let orderedAvailableIDs = displaySelection.orderedDisplayIDs(from: Set(displays.map(\.id)))
+        let targetDisplayIDs = wallpaperProfileController.targetDisplayIDs(
+            for: profile,
+            displays: orderedAvailableIDs,
+            activeDisplayIDs: Set(activeConfigs.keys)
+        )
+        guard !targetDisplayIDs.isEmpty else {
+            lastError = "No displays available for this profile."
+            return
+        }
+
+        let transition = wallpaperProfileController.prepareApplyTransition(
+            profileID: id,
+            currentConfigs: activeConfigs
+        )
+
+        do {
+            var updatedConfigs = activeConfigs
+            for displayID in displaySelection.orderedDisplayIDs(from: targetDisplayIDs) {
+                updatedConfigs[displayID] = desiredConfig(displayID: displayID, content: content)
+                runtimeController.removePausedDisplay(displayID)
+            }
+
+            try await applyRuntimeConfigs(updatedConfigs)
+            wallpaperProfileController.markApplied(transition)
+            await refreshRuntimePolicy()
+            syncApplyStatusFromActiveConfigs()
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func restorePreviousProfileWallpapers() async {
+        guard let restoreConfigs = wallpaperProfileController.restorationConfigsForDeactivation() else {
+            return
+        }
+
+        do {
+            try await replaceActiveRuntimeConfigs(restoreConfigs)
+            await refreshRuntimePolicy()
+            syncApplyStatusFromActiveConfigs()
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     private func syncApplyStatusFromActiveConfigs() {
