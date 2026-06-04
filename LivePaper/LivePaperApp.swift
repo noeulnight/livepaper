@@ -1,9 +1,14 @@
 import SwiftUI
 import AppKit
+import AppIntents
 
 @main
 struct LivePaperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    init() {
+        LivePaperShortcuts.updateAppShortcutParameters()
+    }
 
     var body: some Scene {
         MenuBarExtra("LivePaper", image: "MenuBarIcon") {
